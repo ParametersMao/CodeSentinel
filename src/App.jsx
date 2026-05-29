@@ -647,6 +647,47 @@ function App() {
               ))}
             </section>
 
+            <section className="acceptance-report" aria-label="PR 首页自动回复">
+              <article className="blocker-card">
+                <div className="section-heading">
+                  <span>合并闸口</span>
+                  <strong>{blockerCount > 0 ? '阻断合并' : '人工确认'}</strong>
+                </div>
+                <h2>{blockerCount > 0 ? '发现核心风险点 Blocker' : '未发现阻断级风险'}</h2>
+                <p>
+                  {blockerCount > 0
+                    ? '系统会在 PR 首页回复验收报告，并把 P0 风险标记为必须处理项。合并按钮应保持拦截，直到风险被修复或负责人确认豁免。'
+                    : '当前没有 P0 风险，低风险建议会作为 Checklist 交给作者和评审人确认。'}
+                </p>
+                <div className="blocker-list">
+                  {review.findings
+                    .filter((finding) => finding.severity === 'P0')
+                    .map((finding) => (
+                      <div key={finding.id}>
+                        <span className="severity p0">P0</span>
+                        <b>{finding.title}</b>
+                        <em>{finding.file}:{finding.line}</em>
+                      </div>
+                    ))}
+                </div>
+              </article>
+
+              <article className="checklist-card">
+                <div className="section-heading">
+                  <span>低风险建议</span>
+                  <strong>Checklist</strong>
+                </div>
+                <ul>
+                  {review.checklist.map((item) => (
+                    <li key={item}>
+                      <input type="checkbox" readOnly />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            </section>
+
             <section className="review-grid">
               <article className="findings-panel">
                 <div className="section-heading">
