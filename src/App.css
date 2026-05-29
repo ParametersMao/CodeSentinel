@@ -388,7 +388,8 @@ h2 {
   font-weight: 800;
 }
 
-.setup-form input {
+.setup-form input,
+.setup-form select {
   min-height: 38px;
   border: 1px solid #ccd6e4;
   border-radius: 7px;
@@ -396,6 +397,21 @@ h2 {
   color: #172033;
   font: 650 13px/1.2 var(--font-ui);
   padding: 0 11px;
+}
+
+.config-impact {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #c9dcff;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 12px;
+}
+
+.config-impact span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .config-panel {

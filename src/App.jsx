@@ -186,12 +186,29 @@ const architectureModules = [
   ['模型路由大脑 Multi-Agent Router', '简单总结和意图对比走 GPT-4o-mini / Claude Haiku，深度架构与安全推演走 GPT-4o / Claude Sonnet。'],
 ]
 
-const configPreview = [
-  'project_type: monorepo',
-  'critical_paths: [core, api, service, domain]',
-  'blockers: [auth_bypass, tenant_leak, unsafe_sql]',
-  'test_policy: require_changed_path_coverage',
-]
+const defaultReviewConfig = {
+  projectType: 'monorepo',
+  criticalPaths: 'core, api, service, domain',
+  blockers: 'auth_bypass, tenant_leak, unsafe_sql',
+  testPolicy: 'require_changed_path_coverage',
+}
+
+function listToYamlArray(value) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(', ')
+}
+
+function buildConfigPreview(config) {
+  return [
+    `project_type: ${config.projectType}`,
+    `critical_paths: [${listToYamlArray(config.criticalPaths)}]`,
+    `blockers: [${listToYamlArray(config.blockers)}]`,
+    `test_policy: ${config.testPolicy}`,
+  ]
+}
 
 function parseGitHubPullUrl(url) {
   const match = url.trim().match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i)
@@ -464,6 +481,7 @@ function App() {
   const [activeFindingId, setActiveFindingId] = useState(sampleReview.findings[0].id)
   const [activeView, setActiveView] = useState(views[0])
   const [projectMode, setProjectMode] = useState('existing')
+  const [reviewConfig, setReviewConfig] = useState(defaultReviewConfig)
   const [minSeverity, setMinSeverity] = useState('P1')
   const [confidence, setConfidence] = useState(80)
   const [feedback, setFeedback] = useState('useful')
@@ -488,6 +506,12 @@ function App() {
   const visibleHighRisks = visibleFindings.filter((finding) => severityRank[finding.severity] >= severityRank.P1).length
   const blockerCount = review.findings.filter((finding) => finding.severity === 'P0').length
   const selectedMode = onboardingModes[projectMode]
+  const configPreview = buildConfigPreview(reviewConfig)
+  const blockerRules = listToYamlArray(reviewConfig.blockers)
+
+  function updateReviewConfig(field, value) {
+    setReviewConfig((current) => ({ ...current, [field]: value }))
+  }
 
   async function runAnalysis() {
     setIsAnalyzing(true)
@@ -541,7 +565,7 @@ function App() {
         <div className="sidebar-note">
           <span>商业化基线</span>
           <strong>三路并发审查</strong>
-          <p>拦截层、意图层、架构层同时工作，高危风险进入合并拦截，低风险建议收敛到 Checklist。</p>
+          <p>当前 Blocker：{blockerRules || '未配置'}。高危风险进入合并拦截，低风险建议收敛到 Checklist。</p>
         </div>
       </aside>
 
@@ -619,16 +643,34 @@ function App() {
                 <p>{selectedMode.description}</p>
                 <div className="setup-form" aria-label="架构表单预览">
                   <label>
+                    项目类型
+                    <select value={reviewConfig.projectType} onChange={(event) => updateReviewConfig('projectType', event.target.value)}>
+                      <option value="monorepo">monorepo</option>
+                      <option value="service">service</option>
+                      <option value="frontend">frontend</option>
+                      <option value="library">library</option>
+                    </select>
+                  </label>
+                  <label>
                     核心目录
-                    <input value="core, api, service, domain" readOnly />
+                    <input
+                      value={reviewConfig.criticalPaths}
+                      onChange={(event) => updateReviewConfig('criticalPaths', event.target.value)}
+                    />
                   </label>
                   <label>
                     硬性拦截规则
-                    <input value="权限绕过、租户泄漏、危险 SQL、缺失测试" readOnly />
+                    <input
+                      value={reviewConfig.blockers}
+                      onChange={(event) => updateReviewConfig('blockers', event.target.value)}
+                    />
                   </label>
                   <label>
-                    默认模型策略
-                    <input value="快速总结 + 深度架构审查按风险路由" readOnly />
+                    测试策略
+                    <input
+                      value={reviewConfig.testPolicy}
+                      onChange={(event) => updateReviewConfig('testPolicy', event.target.value)}
+                    />
                   </label>
                 </div>
               </article>
@@ -640,6 +682,10 @@ function App() {
                 </div>
                 <p>已为当前项目生成 AI 审查规范，请确认或微调后启用。</p>
                 <pre>{configPreview.join('\n')}</pre>
+                <div className="config-impact">
+                  <span>策略影响</span>
+                  <p>拦截层会优先扫描 {blockerRules || '未配置规则'}；架构层会围绕 {listToYamlArray(reviewConfig.criticalPaths) || '未配置目录'} 建立隐式规范。</p>
+                </div>
                 <button className="primary-button" type="button" onClick={() => setActiveView('评审工作台')}>
                   确认并进入审查
                 </button>
