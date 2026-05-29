@@ -1,59 +1,62 @@
-# ReviewPilot
+# CodeSentinel 代码哨兵
 
-ReviewPilot is a minimum viable product for AI-assisted GitHub Pull Request review. It focuses on helping engineering teams shorten review cycles, improve risk detection, and reduce noisy AI comments.
+CodeSentinel 是一款面向中国企业研发团队的 AI 辅助 Pull Request 评审 MVP。它的目标不是替代评审人，而是帮助团队更快理解 PR 变更、识别高风险代码、降低无效 AI 评论带来的打扰。
 
-## Product Positioning
+## 产品定位
 
-The tool reviews the code artifact first, but it also models two extra AI-era responsibilities:
+在 AI 编码逐渐普及后，代码评审不应该只变成“评价开发者本人”。CodeSentinel 把评审对象拆成三层：
 
-- Code artifact: whether the diff is safe, correct, maintainable, and testable.
-- AI-agent trace: whether generated code shows prompt loops, shallow fixes, missing rationale, or absent test hypotheses.
-- Human owner: who accepts product intent, operational risk, and production accountability.
+- 代码产物：这次 Diff 是否安全、正确、可维护、可测试。
+- AI Agent 轨迹：生成过程是否出现循环改写、浅层修复、缺少依据或没有测试假设。
+- 人类负责人：谁来确认业务意图、风险取舍和上线责任。
 
-This keeps the review from becoming a personal critique of the developer while still preserving human responsibility.
+这种设计可以避免把 AI 生成代码的问题简单归咎于个人，同时保留工程团队需要的人类责任边界。
 
-## Core Experience
+## 核心能力
 
-- Public GitHub PR ingestion: paste a PR URL and the app fetches PR metadata plus changed-file patches from GitHub's public REST API.
-- PR summary: explains feature changes, core logic changes, breaking risk, and QA test scope.
-- Inline review: highlights risky lines with severity, evidence, impact, and a suggested fix.
-- Noise control: filters comments by severity and confidence so only high-value findings reach the GitHub PR.
-- Context pipeline: combines diff, full files, dependency manifests, issue context, and team standards.
-- Model routing: uses a fast low-cost model for summaries and a stronger reasoning model for risky code paths.
+- 公开 GitHub PR 接入：输入 PR 链接后，系统会拉取 PR 元数据和 changed-file patches。
+- PR 变更摘要：说明改了什么、影响哪些核心逻辑、QA 应该关注哪些测试范围。
+- 风险代码识别：对权限、租户隔离、SQL/查询拼接、危险 DOM、Prompt 循环、缺少测试等信号做初筛。
+- 行级 Review 建议：展示风险级别、证据、影响说明和修改建议。
+- 误报降噪：通过 P0/P1/P2 严重级别、置信度和用户反馈控制评论噪声。
+- 上下文管线：展示 Diff、完整文件、依赖配置、需求上下文和团队规范的接入规划。
+- 模型路由：摘要走快速低成本模型，高风险代码走强推理模型。
 
-## MVP Scope
+## MVP 范围
 
-This version uses a local, explainable review engine to simulate the AI analysis layer. It scans fetched patches for high-risk signals such as permission changes, tenant-scope removal, dynamic query construction, unsafe DOM/runtime execution, AI-agent prompt loops, and missing tests.
+当前版本使用本地、可解释的规则引擎模拟 AI 分析层。它可以真实拉取公开 GitHub PR 数据，并基于 patch 扫描风险信号。
 
-If a public PR cannot be fetched, or the PR is private, the app falls back to a built-in demo review so the workflow remains testable. The next iteration should replace the local rule engine with a model-backed API and add GitHub App authentication for private repositories.
+如果 PR 不可访问、属于私有仓库、URL 无效或遇到 API 限制，系统会回退到内置演示 PR，保证验收流程不中断。
 
-## Architecture Direction
+下一阶段会把本地规则引擎替换为模型 API，并通过 GitHub App 支持私有仓库、完整文件上下文和真实行级评论发布。
 
-1. GitHub App receives PR webhooks and fetches diff, full files, checks, labels, and author metadata.
-2. A retriever expands context with nearby call sites, tests, dependency files, issues, and team rules.
-3. A router sends summary work to a fast model and deep risk analysis to a stronger reasoning model.
-4. A filter deduplicates findings, scores confidence, maps severity, and suppresses low-value comments.
-5. Results are published asynchronously to the PR body, inline comments, and team reporting views.
+## 架构思路
 
-## Current Limitations
+1. 获取：GitHub App 接收 PR Webhook，拉取 Diff、完整文件、CI 状态、标签和作者信息。
+2. 理解：检索调用链、测试文件、依赖配置、Issue/Jira 需求和团队代码规范。
+3. 路由：快速模型生成摘要，强推理模型分析高风险代码片段。
+4. 降噪：根据置信度、严重级别、重复聚类和责任归因过滤低价值评论。
+5. 发布：异步写入 PR 摘要、行级评论、侧边报告和反馈事件。
 
-- Public repositories only; private repos require a GitHub App token.
-- Analysis is local rule-based simulation, not a live LLM call yet.
-- GitHub inline comment publishing is represented in the UI but not posted back to GitHub.
-- Full-file and organization-doc context are shown in the pipeline, with live implementation planned after auth.
+## 当前限制
 
-## Acceptance And Optimization Plan
+- 仅支持公开仓库；私有仓库需要 GitHub App Token。
+- 当前分析层是本地规则模拟，不是实时 LLM 调用。
+- UI 中展示了 GitHub 行级评论能力，但尚未真正回写到 GitHub。
+- 完整文件、企业规范文档和内部需求上下文仍处于规划阶段。
 
-See `docs/optimization-plan.md` for the MVP acceptance result, iteration plan, and self-developed originality statement.
+## 自验收与优化方案
 
-## Future Expansion
+详见 [docs/optimization-plan.md](docs/optimization-plan.md)，其中包含 MVP 自验收结果、迭代计划、自研原创声明和反抄袭原则。
 
-- IDE pre-review before commit or PR creation.
-- Auto-fix branches that apply suggestions and run tests.
-- Reviewer calibration based on accepted, rejected, and ignored AI comments.
-- Engineering quality analytics for recurring risk categories and team training.
+## 后续方向
 
-## Run Locally
+- IDE 预审：在 VS Code 或 JetBrains 中提前发现问题。
+- 自动修复分支：由系统创建修复分支并运行测试。
+- 团队反馈校准：基于采纳、拒绝和忽略的 AI 建议持续优化。
+- 研发质量看板：沉淀常见风险类型、Review 耗时和质量趋势。
+
+## 本地运行
 
 ```bash
 npm install

@@ -1,164 +1,160 @@
-# ReviewPilot MVP Acceptance And Optimization Plan
+# CodeSentinel MVP 自验收与优化方案
 
-## MVP Acceptance Result
+## MVP 自验收结论
 
-The current MVP is accepted as a functional baseline.
+当前 MVP 可以作为第一版可演示基线。
 
-Completed capabilities:
+已完成能力：
 
-- Public GitHub PR URL input.
-- GitHub public REST API fetch for PR metadata and changed-file patches.
-- Local explainable review engine for first-pass risk detection.
-- PR summary, risk findings, inline review panel, suggested fixes, severity labels, confidence filtering, and feedback controls.
-- Review target model for AI-era ownership: code artifact, AI-agent trace, and human owner.
-- Fallback demo flow when a PR is private, unavailable, invalid, or blocked by API limits.
-- Responsive desktop and mobile layouts.
+- 支持输入公开 GitHub PR 链接。
+- 支持通过 GitHub Public REST API 获取 PR 元数据和 changed-file patches。
+- 支持本地可解释规则引擎，完成第一轮风险初筛。
+- 支持 PR 摘要、风险发现、行级 Review 面板、修改建议、严重级别、置信度过滤和反馈按钮。
+- 支持 AI 时代的三层评审对象建模：代码产物、AI Agent 轨迹、人类负责人。
+- 当 PR 私有、不可访问、URL 无效或 API 受限时，支持回退到内置演示流程。
+- 已适配桌面和移动端基础布局。
+- 已完成中文化，产品面向中国企业研发团队，英文仅保留必要技术名词。
 
-Verification performed:
+已执行验证：
 
-- `npm run lint` passed.
-- `npm run build` passed.
-- Public PR flow was tested with `https://github.com/vitejs/vite/pull/22544`.
-- Fallback flow was tested with the built-in demo PR.
-- Desktop and mobile screenshots were generated for visual review.
+- `npm run lint` 通过。
+- `npm run build` 通过。
+- 公开 PR 链路已使用 `https://github.com/vitejs/vite/pull/22544` 验证。
+- fallback 演示链路已验证。
+- 桌面与移动端布局已截图检查。
 
-Current MVP boundary:
+当前边界：
 
-- The analysis layer is rule-based and explainable. It simulates the AI review layer but does not yet call a live LLM.
-- Public repositories are supported. Private repositories require GitHub App authentication in a later iteration.
-- GitHub inline comments are represented in the UI but are not posted back to GitHub yet.
-- Full-file context, organization standards, issue context, and RAG are shown in the product pipeline and should be implemented after authentication.
+- 分析层是本地规则引擎，用来模拟 AI Review 的结构化输出，尚未接入真实 LLM。
+- 当前只支持公开仓库，私有仓库需要后续接入 GitHub App 鉴权。
+- GitHub 行级评论发布目前只在 UI 中表达，尚未真正写回 GitHub。
+- 完整文件、企业规范文档、Jira/Issue 需求上下文和 RAG 检索仍需后续实现。
 
-## Product Originality And Self-Developed Position
+## 自研原创定位
 
-ReviewPilot should be treated as a self-developed product, not a clone of any existing AI code review tool.
+CodeSentinel 应作为自研产品持续推进，不做任何现有 AI Code Review 工具的复刻。
 
-Original product decisions in this MVP:
+当前 MVP 的原创产品判断：
 
-- The review object is split into three layers: code artifact, AI-agent trace, and human owner. This is the core product thesis and should remain a differentiator.
-- The tool is positioned as a team risk arbitration layer, not a generic comment generator.
-- Noise control is designed as a first-class workflow through severity, confidence, and reviewer feedback.
-- The context pipeline is explicit and visible to users, so reviewers can understand why the system reached a conclusion.
-- Model routing is part of the product experience, not only a backend implementation detail.
+- 核心主线不是“AI 自动评论代码”，而是“代码产物 + AI Agent 生成轨迹 + 人类负责人”的联合评审。
+- 产品定位是团队风险仲裁层，而不是通用评论生成器。
+- 降噪机制是核心体验的一部分，不是后置设置项。
+- 上下文来源和模型路由对用户可见，让评审人知道系统为什么这么判断。
+- 产品默认面向中国企业研发团队，语言、场景、责任边界和协作方式都以国内 B 端客户为主。
 
-Anti-plagiarism principles:
+反抄袭原则：
 
-- Do not copy interface layouts, copywriting, icons, visual identity, product flows, or documentation from existing commercial tools.
-- Use competitor research only to understand user needs, not to reproduce specific designs.
-- Keep the brand name, information architecture, visual language, examples, and product narrative original.
-- Use open-source libraries only according to their licenses and document any material dependency added later.
-- When adding model prompts, review rules, sample data, or benchmark cases, write them in-house or use properly licensed public examples.
-- Do not market the product with claims, screenshots, or UI patterns that could imply affiliation with another product.
+- 不复制任何竞品的界面布局、文案、图标、视觉识别、流程设计或文档结构。
+- 竞品调研只用于理解用户需求，不用于复刻具体设计。
+- 品牌命名、信息架构、产品叙事、样例数据和 Review 规则均保持自研。
+- 后续引入开源依赖时，必须遵守许可证并在文档中说明。
+- Prompt、规则、样例和评测集应由团队自建，或使用明确允许的公开数据。
+- 对外展示时不得使用可能暗示与其他产品有关联的截图、表述或视觉元素。
 
-## Iteration Plan
+## 迭代计划
 
-### Iteration 1: MVP Hardening
+### 第一阶段：MVP 加固
 
-Goal: make the current local product reliable enough for demos and early user feedback.
+目标：让当前本地产品足够稳定，适合演示、路演和早期用户访谈。
 
-Tasks:
+任务：
 
-- Add clearer empty states when filters hide all findings.
-- Add URL validation before calling GitHub.
-- Add loading states for PR fetch, patch parsing, analysis, and report generation.
-- Improve rule explanations so each finding has evidence, impact, confidence reason, and suggested verification.
-- Add local persistence for the last analyzed PR and user feedback.
-- Add a small test fixture set for patch parsing and rule detection.
+- 优化 URL 校验和错误提示。
+- 拆分 PR 获取、Patch 解析、规则分析、报告生成的加载状态。
+- 优化空状态，尤其是过滤条件隐藏全部风险项时的说明。
+- 增强每条风险项的解释：证据、影响、置信度原因、建议验证方式。
+- 本地保存最近分析过的 PR 和用户反馈。
+- 为 patch parser 和规则分析器补最小测试集。
 
-Acceptance criteria:
+验收标准：
 
-- A user can analyze a public PR without reading setup docs.
-- Invalid or private PRs fail gracefully and preserve the demo workflow.
-- Findings are understandable without extra explanation from the presenter.
+- 用户不看说明也能分析一个公开 PR。
+- 私有 PR 或错误 URL 能优雅失败，并保留演示流程。
+- 每条风险项都能独立说清楚“为什么需要看”。
 
-### Iteration 2: Real AI Review API
+### 第二阶段：真实 AI Review API
 
-Goal: replace the rule-only analyzer with a model-backed review service while keeping rule explanations as guardrails.
+目标：用模型服务替换纯规则分析，但保留规则层作为安全护栏。
 
-Tasks:
+任务：
 
-- Create a backend API boundary for analysis.
-- Add model routing:
-  - Fast model for PR summary and QA scope.
-  - Strong reasoning model for high-risk hunks.
-  - Embedding/retrieval model for repository and policy context.
-- Add prompt contracts for summary, risk detection, suggested fixes, and confidence scoring.
-- Add structured JSON output validation to avoid malformed model responses.
-- Add deduplication and severity normalization after model output.
+- 新增后端分析 API 边界。
+- 增加模型路由：
+  - 快速模型负责 PR 摘要和 QA 范围建议。
+  - 强推理模型负责高风险代码片段。
+  - Embedding/RAG 负责仓库上下文和团队规范检索。
+- 设计结构化输出协议，避免模型返回不可解析文本。
+- 增加模型结果去重、严重级别归一和置信度校准。
 
-Acceptance criteria:
+验收标准：
 
-- Model output is structured, traceable, and filterable.
-- The app can explain why a finding was shown.
-- Low-confidence comments are suppressed by default.
+- 模型输出可结构化、可追踪、可过滤。
+- 每条建议都能说明使用了哪些上下文。
+- 低置信度内容不会默认打扰开发者。
 
-### Iteration 3: GitHub App Integration
+### 第三阶段：GitHub App 集成
 
-Goal: support private repositories and publish review results back into GitHub.
+目标：支持企业私有仓库，并把评审结果真正发布回 GitHub。
 
-Tasks:
+任务：
 
-- Implement GitHub App authentication.
-- Fetch private PR diffs, full files, checks, labels, comments, and CODEOWNERS.
-- Post PR summary as a comment or managed PR body section.
-- Post P0/P1 inline review comments.
-- Keep P2 findings in the ReviewPilot report unless the reviewer opts in.
-- Store feedback signals from reviewer actions.
+- 实现 GitHub App 安装和鉴权。
+- 获取私有 PR 的 Diff、完整文件、检查状态、评论、标签和 CODEOWNERS。
+- 将 PR 摘要发布为评论或受控的 PR 描述区块。
+- 将 P0/P1 风险发布为行级评论。
+- P2 建议默认留在 CodeSentinel 报告中。
+- 记录评审人对 AI 评论的采纳、忽略和负反馈。
 
-Acceptance criteria:
+验收标准：
 
-- A team can install the GitHub App on a repository.
-- ReviewPilot can analyze private PRs.
-- ReviewPilot can publish and update comments without duplicating old comments.
+- 企业团队可以安装 GitHub App。
+- 私有仓库 PR 可以被分析。
+- 评论发布不会重复刷屏，能更新已有结果。
 
-### Iteration 4: Context Intelligence
+### 第四阶段：上下文智能
 
-Goal: reduce false positives and missed risks by improving context retrieval.
+目标：通过更完整的上下文降低误报和漏报。
 
-Tasks:
+任务：
 
-- Retrieve full touched files and nearby call sites.
-- Fetch dependency manifests, test files, route/config files, and schema/migration files.
-- Support team rule documents and secure coding standards.
-- Connect issue or ticket context where available.
-- Add repository-specific risk profiles, such as auth-heavy services, payment services, or multi-tenant data paths.
+- 拉取完整变更文件和相邻调用点。
+- 获取依赖配置、测试文件、路由配置、Schema/Migration 等关键上下文。
+- 支持团队安全规范、代码规范和架构约束文档。
+- 接入 Issue、Jira 或需求文档。
+- 为权限、支付、多租户、数据平台等不同类型仓库建立风险画像。
 
-Acceptance criteria:
+验收标准：
 
-- Findings cite the context sources used.
-- The same diff receives better severity and confidence after repository context is added.
-- Reviewers can inspect context instead of trusting a black-box answer.
+- 风险项能引用具体上下文来源。
+- 相同 Diff 在补充上下文后能得到更准确的级别和置信度。
+- 评审人可以检查上下文，而不是盲信模型。
 
-### Iteration 5: Developer Workflow And Team Value
+### 第五阶段：研发流程与团队价值
 
-Goal: move from a useful tool to an enterprise product.
+目标：从单点工具升级为企业研发质量产品。
 
-Tasks:
+任务：
 
-- Add IDE pre-review for VS Code or JetBrains.
-- Add auto-fix branch creation with test execution.
-- Add reviewer calibration from accepted, rejected, and ignored findings.
-- Add team dashboards for recurring risks, review latency, and escaped defect categories.
-- Add organization-level controls for privacy, retention, model providers, and audit logs.
+- 支持 IDE 预审，在提交 PR 前发现问题。
+- 支持自动修复分支，并运行测试。
+- 基于采纳、拒绝、忽略等反馈校准团队模型。
+- 生成团队研发质量看板：常见风险、Review 耗时、缺陷逃逸类型。
+- 增加企业级隐私、数据保留、模型供应商选择和审计日志。
 
-Acceptance criteria:
+验收标准：
 
-- Teams can measure review time saved and risk classes reduced.
-- ReviewPilot helps engineering leaders identify training and process gaps.
-- Developers can use it before PR creation, not only after review starts.
+- 团队能量化节省的 Review 时间。
+- 管理者能识别团队常见质量短板。
+- 开发者可以在本地提交前获得有效反馈。
 
-## Design Direction For Future Iterations
+## 后续设计原则
 
-Keep the interface operational and work-focused.
+- 保持工具型、工作台型界面，不做营销页风格。
+- 桌面端重点同时展示 PR 摘要、风险列表、Diff、上下文和模型路由。
+- 移动端重点支持摘要阅读和风险分诊，不强求完整 Diff 体验。
+- 避免通用 AI 产品常见的空泛文案和装饰性视觉。
+- 在决策点解释置信度、严重级别和上下文来源。
 
-Design rules:
+## 建议的下一步
 
-- Prioritize dense but readable review workflows over marketing-style presentation.
-- Keep PR summary, risk findings, diff context, and model/context transparency visible together on desktop.
-- On mobile, prioritize review triage and summary reading rather than full diff analysis.
-- Avoid decorative clutter, copied dashboard patterns, and generic AI-product visual tropes.
-- Make confidence, severity, and context sources explainable at the point of decision.
-
-## Recommended Next Step
-
-The next engineering step should be Iteration 1 hardening plus a small test suite for the patch parser and rule analyzer. That creates a stable base before adding a live model API or GitHub App permissions.
+优先完成第一阶段 MVP 加固，并补充 patch parser 与规则分析器的最小测试集。这个基础稳定后，再接真实 LLM API 和 GitHub App 权限体系。
