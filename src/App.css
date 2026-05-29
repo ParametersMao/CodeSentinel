@@ -142,6 +142,10 @@
 .context-panel,
 .decision-panel,
 .roadmap-panel,
+.flow-panel,
+.setup-panel,
+.config-panel,
+.lane-card,
 .architecture-strip {
   max-width: 100%;
   background: #ffffff;
@@ -280,6 +284,168 @@ h2 {
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 18px;
   padding: 18px;
+}
+
+.onboarding-view {
+  display: grid;
+  gap: 16px;
+}
+
+.flow-panel,
+.setup-panel,
+.config-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.flow-grid,
+.lane-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flow-card,
+.lane-card {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.flow-card b,
+.lane-card b,
+.score-card strong {
+  color: #111827;
+}
+
+.flow-card b {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.flow-card p,
+.setup-panel p,
+.config-panel p,
+.lane-card p,
+.score-card p {
+  overflow-wrap: anywhere;
+  color: #526071;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.flow-card p + p {
+  margin-top: 8px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mode-switch button {
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #334155;
+  font: 800 13px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  border-color: #2563eb;
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.setup-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.setup-form label {
+  display: grid;
+  gap: 6px;
+  color: #526071;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.setup-form input {
+  min-height: 38px;
+  border: 1px solid #ccd6e4;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #172033;
+  font: 650 13px/1.2 var(--font-ui);
+  padding: 0 11px;
+}
+
+.config-panel {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+}
+
+.config-panel pre {
+  overflow: auto;
+  margin: 0;
+  border: 1px solid #d7e0ec;
+  border-radius: 8px;
+  background: #101827;
+  color: #d7e7ff;
+  font: 12px/1.7 var(--font-mono);
+  padding: 14px;
+}
+
+.report-panel {
+  grid-template-columns: minmax(0, 1fr) 220px;
+}
+
+.score-card {
+  min-height: 144px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  border: 1px solid #d6e2f2;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 16px;
+}
+
+.score-card span,
+.lane-card span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.score-card strong {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.lane-card {
+  background: #f8fafc;
+}
+
+.lane-card b {
+  display: block;
+  margin: 6px 0;
+  font-size: 14px;
 }
 
 .summary-copy {
@@ -725,6 +891,9 @@ h2 {
   .topbar,
   .summary-panel,
   .review-grid,
+  .setup-grid,
+  .flow-grid,
+  .lane-grid,
   .secondary-view,
   .secondary-view.compact,
   .architecture-strip {
@@ -742,6 +911,10 @@ h2 {
   }
 
   .summary-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .report-panel {
     grid-template-columns: 1fr;
   }
 
@@ -772,7 +945,10 @@ h2 {
   .diff-panel,
   .context-panel,
   .decision-panel,
-  .roadmap-panel {
+  .roadmap-panel,
+  .flow-panel,
+  .setup-panel,
+  .config-panel {
     padding: 12px;
   }
 

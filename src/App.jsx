@@ -5,10 +5,15 @@ const samplePrUrl = 'https://github.com/acme/codesentinel/pull/421'
 
 const severityRank = { P0: 3, P1: 2, P2: 1 }
 
+const views = ['接入配置', '评审工作台', '系统设计', '团队洞察']
+
 const sampleReview = {
   source: '演示样例',
   status: 'ready',
   summaryStatus: '可交给评审人',
+  ciStatus: '30 秒内完成',
+  reportTitle: '变更验收报告',
+  healthScore: 82,
   pr: {
     title: '保护分支合并流程与 AI Review Prompt 更新',
     number: 421,
@@ -36,6 +41,7 @@ const sampleReview = {
       title: '合并权限校验可能被绕过',
       confidence: 94,
       owner: '代码产物',
+      lane: '拦截层',
       impact: '当分支规则缓存命中时，拥有普通写权限的用户可能绕过保护分支校验并完成合并。',
       evidence: '新增的快速返回路径发生在 validateBranchProtection 之前。',
       suggestion: '将 validateBranchProtection 前置到缓存返回之前，并补充缓存命中场景的回归测试。',
@@ -48,6 +54,7 @@ const sampleReview = {
       title: 'Review 查询可能丢失租户过滤',
       confidence: 89,
       owner: '人类负责人',
+      lane: '架构层',
       impact: '企业客户可能在评审看板中看到其他组织的 Review 元数据。',
       evidence: '旧逻辑中的 orgId 条件被删除，但底层仍然使用共享 reviews 表。',
       suggestion: '恢复 orgId 查询条件，并在 repository 测试夹具中加入组织隔离断言。',
@@ -60,6 +67,7 @@ const sampleReview = {
       title: '自动修复 Prompt 可能导致循环改写',
       confidence: 82,
       owner: 'AI Agent 轨迹',
+      lane: '意图层',
       impact: '开发者 Agent 可能反复重写同一段代码，却没有说明失败原因和取舍。',
       evidence: 'Prompt 要求修复问题，但没有要求引用失败检查、解释补丁或设置停止条件。',
       suggestion: '要求 Agent 引用失败检查、说明修改原因，并在一次重试仍失败后停止自动改写。',
@@ -72,10 +80,16 @@ const sampleReview = {
       title: 'PR 摘要缺少测试范围建议',
       confidence: 71,
       owner: '代码产物',
+      lane: '反馈层',
       impact: 'QA 可以看到变更摘要，但无法快速判断需要重点回归哪些路径。',
       evidence: '当前摘要只描述功能和文件，没有说明测试面。',
       suggestion: '根据变更路由和 API 追加一段测试范围建议。',
     },
+  ],
+  checklist: [
+    '确认保护分支缓存命中时仍会执行权限校验。',
+    '补充组织隔离回归测试，覆盖跨租户读取场景。',
+    '要求 Agent Prompt 增加失败解释和停止条件。',
   ],
   diffRows: [
     { type: 'context', old: '82', next: '82', code: 'export async function mergePullRequest(input: MergeInput) {' },
@@ -89,20 +103,58 @@ const sampleReview = {
   ],
 }
 
-const views = ['评审工作台', '系统设计', '团队洞察']
+const onboardingModes = {
+  new: {
+    title: '空白 / 新项目',
+    description: '通过 Web 表单补齐架构边界、核心模块、技术栈、禁止事项和测试要求，生成第一版 AI 审查规范。',
+    status: '表单引导',
+  },
+  existing: {
+    title: '存量项目',
+    description: '拉取 core、api、service、domain 等高频修改目录，抽取隐式代码规范和优秀历史代码切片。',
+    status: '自动归纳',
+  },
+}
 
-const pipelineSteps = [
-  ['获取', '通过 GitHub App 或公开 API 获取 PR Diff、完整文件、检查状态、标签和作者信息。'],
-  ['理解', '补充调用链、依赖配置、测试文件、需求描述和团队代码规范。'],
-  ['路由', '摘要走快速低成本模型，高风险代码走强推理模型。'],
-  ['降噪', '用置信度、严重级别、重复聚类和责任归因压低无效评论。'],
-  ['发布', '异步写入 PR 摘要、行级评论、侧边报告和反馈事件。'],
+const businessFlow = [
+  {
+    stage: '接入期',
+    trigger: '用户授权 GitHub 仓库',
+    action: '双轨初始化：新项目填写架构表单，存量项目拉取高频 core/ 基底目录并生成隐式规范。',
+    output: '仪表盘提示“已为您生成当前项目的 AI 审查规范，请确认或微调”。',
+  },
+  {
+    stage: '审查期',
+    trigger: '开发者提交 Pull Request',
+    action: '多路并发分析：拦截层匹配硬规则，意图层对比 Issue 与 Diff，架构层用 RAG 检索存量代码。',
+    output: 'GitHub CI/CD 状态显示 Running，目标 30 秒内完成首轮结果。',
+  },
+  {
+    stage: '反馈期',
+    trigger: '分析完成',
+    action: '生成健康度评分、核心风险点 Blocker，并把低风险建议收敛为 Checklist。',
+    output: 'PR 首页自动回复《变更验收报告》，高危风险进入合并拦截。',
+  },
 ]
 
-const designDecisions = [
-  ['模型选择', 'MVP 用可解释规则模拟 AI 分析；生产版按任务路由模型，摘要优先速度与成本，风险识别优先推理质量。'],
-  ['上下文获取', '先拿 Diff，再补完整文件、依赖配置、测试文件和需求背景，避免只看几行代码导致误判。'],
-  ['误报控制', '默认只主动暴露 P0/P1，P2 进入报告，不直接打断开发者。反馈数据用于后续校准。'],
+const analysisLanes = [
+  ['拦截层', '硬性规则', '权限绕过、危险 API、配置违规、测试缺口等确定性信号。'],
+  ['意图层', 'Issue 对齐', '比较需求描述、PR 标题和 Code Diff，判断是否偏离业务意图。'],
+  ['架构层', 'RAG 审查', '召回历史代码切片和隐式规范，识别设计模式偏离与边界破坏。'],
+]
+
+const architectureModules = [
+  ['接入层 Webhook & API', '监听 GitHub pull_request 事件，获取 Diff、PR 元数据、Issue 描述、CI 状态和作者信息。'],
+  ['上下文引擎 Context Engine', '读取 .ai-reviewer.yml、依赖配置、完整文件、调用链和测试文件，组织模型可用上下文。'],
+  ['向量检索库 Vector DB', '存储初始化阶段生成的隐式规范、优秀历史代码切片和团队最佳实践，用于在线 RAG 召回。'],
+  ['模型路由大脑 Multi-Agent Router', '简单总结和意图对比走 GPT-4o-mini / Claude Haiku，深度架构与安全推演走 GPT-4o / Claude Sonnet。'],
+]
+
+const configPreview = [
+  'project_type: monorepo',
+  'critical_paths: [core, api, service, domain]',
+  'blockers: [auth_bypass, tenant_leak, unsafe_sql]',
+  'test_policy: require_changed_path_coverage',
 ]
 
 function parseGitHubPullUrl(url) {
@@ -146,6 +198,7 @@ function buildReviewFromGitHub({ owner, repo, pr, files }) {
     title: 'MVP 规则未发现阻断级风险',
     confidence: 68,
     owner: '代码产物',
+    lane: '反馈层',
     impact: '当前本地分析器没有识别到 P0/P1 风险，但合并前仍建议运行深度模型评审和项目测试。',
     evidence: '规则已扫描权限、租户隔离、注入、危险 DOM、Prompt 循环和缺少测试等信号。',
     suggestion: '合并前运行强推理模型 Review，并确认项目测试或 CI 已覆盖核心路径。',
@@ -157,6 +210,9 @@ function buildReviewFromGitHub({ owner, repo, pr, files }) {
     source: 'GitHub 公开 API',
     status: 'ready',
     summaryStatus: '可交给评审人',
+    ciStatus: '30 秒内完成',
+    reportTitle: '变更验收报告',
+    healthScore: calculateHealthScore(activeFindings, files),
     pr: {
       title: pr.title,
       number: pr.number,
@@ -175,6 +231,7 @@ function buildReviewFromGitHub({ owner, repo, pr, files }) {
     },
     summary: createSummary(pr, files, activeFindings),
     findings: activeFindings,
+    checklist: createChecklist(activeFindings, files),
     diffRows: patchToRows(firstPatchFile?.patch, firstPatchFile?.filename),
   }
 }
@@ -197,34 +254,34 @@ function analyzeFiles(files) {
     const line = firstAddedLineNumber(patch)
 
     if (/auth|permission|role|policy|token|session/.test(lowerName) && /return|cache|skip|bypass|allow/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P0', line, '权限敏感路径发生变更', 91, '代码产物', '权限或认证相关文件中新增了快速返回、缓存或放行逻辑。', '安全敏感代码的小顺序调整也可能绕过策略校验，需要深度评审。', '补充明确的授权测试，并确认任何快速路径之前都已执行权限校验。'))
+      findings.push(makeFinding(file, fileIndex, 'P0', line, '权限敏感路径发生变更', 91, '代码产物', '拦截层', '权限或认证相关文件中新增了快速返回、缓存或放行逻辑。', '安全敏感代码的小顺序调整也可能绕过策略校验，需要深度评审。', '补充明确的授权测试，并确认任何快速路径之前都已执行权限校验。'))
     }
 
     if (/(tenant|orgId|workspaceId|accountId)/i.test(removed) && !/(tenant|orgId|workspaceId|accountId)/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P1', line, '租户或组织隔离条件可能被移除', 88, '人类负责人', '删除行里出现租户隔离字段，但新增行没有对应约束。', '多租户数据路径丢失过滤条件时，容易造成跨组织数据泄露。', '恢复隔离条件，或补充说明为什么该路径不再需要租户约束。'))
+      findings.push(makeFinding(file, fileIndex, 'P1', line, '租户或组织隔离条件可能被移除', 88, '人类负责人', '架构层', '删除行里出现租户隔离字段，但新增行没有对应约束。', '多租户数据路径丢失过滤条件时，容易造成跨组织数据泄露。', '恢复隔离条件，或补充说明为什么该路径不再需要租户约束。'))
     }
 
     if (/(query|sql|execute|raw)/i.test(added) && /`|\$\{|concat\(/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P1', line, '可能存在动态 SQL 或查询拼接', 84, '代码产物', '新增代码疑似使用插值或拼接构造查询。', '动态查询如果没有参数绑定，可能引入注入风险。', '改为参数化查询，并增加恶意输入用例。'))
+      findings.push(makeFinding(file, fileIndex, 'P1', line, '可能存在动态 SQL 或查询拼接', 84, '代码产物', '拦截层', '新增代码疑似使用插值或拼接构造查询。', '动态查询如果没有参数绑定，可能引入注入风险。', '改为参数化查询，并增加恶意输入用例。'))
     }
 
     if (/dangerouslySetInnerHTML|innerHTML|eval\(|Function\(/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P1', line, '出现危险 DOM 或运行时代码执行', 86, '代码产物', '新增代码包含 HTML 注入或运行时代码执行 API。', '这些 API 风险较高，通常需要输入净化或更安全的渲染方式。', '改用安全渲染方式，或在边界处净化输入并说明可信来源。'))
+      findings.push(makeFinding(file, fileIndex, 'P1', line, '出现危险 DOM 或运行时代码执行', 86, '代码产物', '拦截层', '新增代码包含 HTML 注入或运行时代码执行 API。', '这些 API 风险较高，通常需要输入净化或更安全的渲染方式。', '改用安全渲染方式，或在边界处净化输入并说明可信来源。'))
     }
 
     if (/prompt|agent|ai|reviewer|system/i.test(lowerName) && /fix|retry|loop|again|agent/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P1', line, 'Agent 指令可能导致自动修复循环', 82, 'AI Agent 轨迹', 'Prompt 或 Agent 工作流文件中新增了修复、重试或循环相关指令。', 'AI 生成代码的流程风险在于重复产出弱补丁，却没有失败解释和停止条件。', '要求 Agent 引用证据、说明测试，并在一次失败重试后停止自动改写。'))
+      findings.push(makeFinding(file, fileIndex, 'P1', line, 'Agent 指令可能导致自动修复循环', 82, 'AI Agent 轨迹', '意图层', 'Prompt 或 Agent 工作流文件中新增了修复、重试或循环相关指令。', 'AI 生成代码的流程风险在于重复产出弱补丁，却没有失败解释和停止条件。', '要求 Agent 引用证据、说明测试，并在一次失败重试后停止自动改写。'))
     }
 
     if (!lowerName.includes('test') && !hasTestFile) {
-      findings.push(makeFinding(file, fileIndex, 'P2', line, '未检测到相邻测试变更', 72, '代码产物', 'PR 修改了生产代码，但前 100 个文件中未出现 test 类文件。', '这不一定是错误，但会增加 Review 和回归验证成本。', '要求作者或编码 Agent 补充聚焦测试，或说明已有覆盖为什么足够。'))
+      findings.push(makeFinding(file, fileIndex, 'P2', line, '未检测到相邻测试变更', 72, '代码产物', '反馈层', 'PR 修改了生产代码，但前 100 个文件中未出现 test 类文件。', '这不一定是错误，但会增加 Review 和回归验证成本。', '要求作者或编码 Agent 补充聚焦测试，或说明已有覆盖为什么足够。'))
     }
   })
 
   return dedupeFindings(findings).slice(0, 8)
 }
 
-function makeFinding(file, fileIndex, severity, line, title, confidence, owner, evidence, impact, suggestion) {
+function makeFinding(file, fileIndex, severity, line, title, confidence, owner, lane, evidence, impact, suggestion) {
   return {
     id: `${fileIndex}-${severity}-${title}`,
     severity,
@@ -233,6 +290,7 @@ function makeFinding(file, fileIndex, severity, line, title, confidence, owner, 
     title,
     confidence,
     owner,
+    lane,
     impact,
     evidence,
     suggestion,
@@ -306,6 +364,29 @@ function createSummary(pr, files, findings) {
   return `${pr.title}。该 PR 修改 ${files.length} 个文件，触及 ${compactNumber(pr.additions + pr.deletions)} 行。${riskText}${testText}`
 }
 
+function createChecklist(findings, files) {
+  const items = findings
+    .filter((finding) => finding.severity !== 'P0')
+    .slice(0, 3)
+    .map((finding) => finding.suggestion)
+
+  if (!files.some((file) => file.filename.toLowerCase().includes('test'))) {
+    items.push('补充测试覆盖说明，明确为何当前 PR 可以安全合并。')
+  }
+
+  return items.slice(0, 4)
+}
+
+function calculateHealthScore(findings, files) {
+  const penalty = findings.reduce((score, finding) => {
+    if (finding.severity === 'P0') return score + 22
+    if (finding.severity === 'P1') return score + 10
+    return score + 4
+  }, 0)
+  const testPenalty = files.some((file) => file.filename.toLowerCase().includes('test')) ? 0 : 6
+  return Math.max(42, 100 - penalty - testPenalty)
+}
+
 function estimateMissingTests(files) {
   const productionFiles = files.filter((file) => !file.filename.toLowerCase().includes('test')).length
   const testFiles = files.filter((file) => file.filename.toLowerCase().includes('test')).length
@@ -333,9 +414,9 @@ function contextSources(review) {
   return [
     ['Git Diff', `${review.metrics.changedLines} 行变更`, 'ready'],
     ['完整文件', `${review.metrics.files} 个相关文件`, review.source.includes('GitHub') ? 'ready' : 'demo'],
-    ['依赖配置', 'package.json、lockfile', 'planned'],
-    ['需求上下文', `PR #${review.pr.number}、标签`, review.source.includes('GitHub') ? 'partial' : 'demo'],
-    ['团队规范', '安全 Review 策略', 'ready'],
+    ['.ai-reviewer.yml', '硬性规则、目录边界、测试策略', 'planned'],
+    ['需求上下文', `Issue / PR #${review.pr.number}`, review.source.includes('GitHub') ? 'partial' : 'demo'],
+    ['隐式规范', 'core/、api/、service/ 历史代码切片', 'planned'],
   ]
 }
 
@@ -346,6 +427,7 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [activeFindingId, setActiveFindingId] = useState(sampleReview.findings[0].id)
   const [activeView, setActiveView] = useState(views[0])
+  const [projectMode, setProjectMode] = useState('existing')
   const [minSeverity, setMinSeverity] = useState('P1')
   const [confidence, setConfidence] = useState(80)
   const [feedback, setFeedback] = useState('useful')
@@ -368,15 +450,18 @@ function App() {
   }, [activeFindingId, review.findings, visibleFindings])
 
   const visibleHighRisks = visibleFindings.filter((finding) => severityRank[finding.severity] >= severityRank.P1).length
+  const blockerCount = review.findings.filter((finding) => finding.severity === 'P0').length
+  const selectedMode = onboardingModes[projectMode]
 
   async function runAnalysis() {
     setIsAnalyzing(true)
-    setStatusMessage('正在从 GitHub 获取 PR 元数据、变更文件和 Patch...')
+    setStatusMessage('正在从 GitHub 获取 PR 元数据、变更文件和 Patch，并启动三路并发分析...')
 
     try {
       const liveReview = await fetchGitHubPullRequest(prUrl)
       setReview(liveReview)
       setActiveFindingId(liveReview.findings[0].id)
+      setActiveView('评审工作台')
       setStatusMessage('已完成公开 PR 分析。私有仓库、企业规范和内部文档会在 GitHub App 版本中接入。')
     } catch (error) {
       setReview({
@@ -385,6 +470,7 @@ function App() {
         summaryStatus: '演示样例生效',
       })
       setActiveFindingId(sampleReview.findings[0].id)
+      setActiveView('评审工作台')
       setStatusMessage(`${error.message} 当前回退到内置演示 PR，保证评审流程可继续体验。`)
     } finally {
       setIsAnalyzing(false)
@@ -398,7 +484,7 @@ function App() {
           <span className="brand-mark">C</span>
           <div>
             <strong>CodeSentinel</strong>
-            <span>代码哨兵 AI Review</span>
+            <span>AI 架构师 V1.0</span>
           </div>
         </div>
 
@@ -417,9 +503,9 @@ function App() {
         </nav>
 
         <div className="sidebar-note">
-          <span>当前策略</span>
-          <strong>只主动评论 P0 / P1</strong>
-          <p>P2 建议默认留在报告里，减少 AI 评论打扰，让开发者先处理真正影响合并的事项。</p>
+          <span>商业化基线</span>
+          <strong>三路并发审查</strong>
+          <p>拦截层、意图层、架构层同时工作，高危风险进入合并拦截，低风险建议收敛到 Checklist。</p>
         </div>
       </aside>
 
@@ -427,7 +513,7 @@ function App() {
         <header className="topbar">
           <div>
             <span className="eyebrow">AI 辅助 Pull Request Review</span>
-            <h1>先判断能不能合，再解释为什么。</h1>
+            <h1>AI 架构师 V1.0：先接入规范，再审查变更。</h1>
           </div>
           <form
             className="pr-input"
@@ -456,13 +542,83 @@ function App() {
           <span>{statusMessage}</span>
         </div>
 
+        {activeView === '接入配置' && (
+          <section className="onboarding-view">
+            <article className="flow-panel">
+              <div className="section-heading">
+                <span>核心业务流</span>
+                <strong>接入期 / 审查期 / 反馈期</strong>
+              </div>
+              <div className="flow-grid">
+                {businessFlow.map((item) => (
+                  <div className="flow-card" key={item.stage}>
+                    <b>{item.stage}</b>
+                    <p><strong>触发：</strong>{item.trigger}</p>
+                    <p><strong>后台：</strong>{item.action}</p>
+                    <p><strong>呈现：</strong>{item.output}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <section className="setup-grid">
+              <article className="setup-panel">
+                <div className="section-heading">
+                  <span>仓库初始化</span>
+                  <strong>{selectedMode.status}</strong>
+                </div>
+                <div className="mode-switch" aria-label="项目类型">
+                  {Object.entries(onboardingModes).map(([key, mode]) => (
+                    <button
+                      className={projectMode === key ? 'active' : ''}
+                      key={key}
+                      type="button"
+                      onClick={() => setProjectMode(key)}
+                    >
+                      {mode.title}
+                    </button>
+                  ))}
+                </div>
+                <h2>{selectedMode.title}</h2>
+                <p>{selectedMode.description}</p>
+                <div className="setup-form" aria-label="架构表单预览">
+                  <label>
+                    核心目录
+                    <input value="core, api, service, domain" readOnly />
+                  </label>
+                  <label>
+                    硬性拦截规则
+                    <input value="权限绕过、租户泄漏、危险 SQL、缺失测试" readOnly />
+                  </label>
+                  <label>
+                    默认模型策略
+                    <input value="快速总结 + 深度架构审查按风险路由" readOnly />
+                  </label>
+                </div>
+              </article>
+
+              <article className="config-panel">
+                <div className="section-heading">
+                  <span>生成结果</span>
+                  <strong>AI 审查规范</strong>
+                </div>
+                <p>已为当前项目生成 AI 审查规范，请确认或微调后启用。</p>
+                <pre>{configPreview.join('\n')}</pre>
+                <button className="primary-button" type="button" onClick={() => setActiveView('评审工作台')}>
+                  确认并进入审查
+                </button>
+              </article>
+            </section>
+          </section>
+        )}
+
         {activeView === '评审工作台' && (
           <>
-            <section className="summary-panel">
+            <section className="summary-panel report-panel">
               <div className="summary-copy">
                 <div className="section-heading">
-                  <span>PR 摘要</span>
-                  <strong>{isAnalyzing ? '正在生成草稿' : review.summaryStatus}</strong>
+                  <span>{review.reportTitle}</span>
+                  <strong>{isAnalyzing ? 'Running...' : review.ciStatus}</strong>
                 </div>
                 <h2>{review.pr.title}</h2>
                 <p>{review.summary}</p>
@@ -474,18 +630,27 @@ function App() {
                 </div>
               </div>
 
-              <div className="summary-metrics" aria-label="关键指标">
-                <span><strong>{review.metrics.files}</strong> 文件</span>
-                <span><strong>{review.metrics.changedLines}</strong> 变更行</span>
-                <span><strong>{review.metrics.highRiskPaths}</strong> 高风险</span>
-                <span><strong>{review.metrics.testsMissing}</strong> 测试缺口</span>
+              <div className="score-card" aria-label="健康度评分">
+                <span>健康度评分</span>
+                <strong>{review.healthScore}</strong>
+                <p>{blockerCount > 0 ? `${blockerCount} 个 Blocker，建议拦截合并` : '未发现阻断风险，可进入人工确认'}</p>
               </div>
+            </section>
+
+            <section className="lane-grid" aria-label="多路并发分析">
+              {analysisLanes.map(([name, type, detail]) => (
+                <div className="lane-card" key={name}>
+                  <span>{name}</span>
+                  <b>{type}</b>
+                  <p>{detail}</p>
+                </div>
+              ))}
             </section>
 
             <section className="review-grid">
               <article className="findings-panel">
                 <div className="section-heading">
-                  <span>需要先看的风险</span>
+                  <span>核心风险点</span>
                   <strong>{visibleFindings.length} 条</strong>
                 </div>
                 <div className="filters" aria-label="降噪控制">
@@ -547,7 +712,7 @@ function App() {
                   <div className="comment-header">
                     <span className={`severity ${selectedFinding.severity.toLowerCase()}`}>{selectedFinding.severity}</span>
                     <strong>{selectedFinding.title}</strong>
-                    <em>{selectedFinding.owner}</em>
+                    <em>{selectedFinding.lane} · {selectedFinding.owner}</em>
                   </div>
                   <p>{selectedFinding.impact}</p>
                   <p><b>证据：</b>{selectedFinding.evidence}</p>
@@ -596,22 +761,13 @@ function App() {
               </div>
             </article>
 
-            <article className="decision-panel">
+            <article className="decision-panel architecture-panel">
               <div className="section-heading">
-                <span>产品取舍</span>
-                <strong>准确性 / 速度 / 降噪</strong>
+                <span>系统架构拆解</span>
+                <strong>V1.0 商业化基线</strong>
               </div>
-              {designDecisions.map(([title, detail]) => (
+              {architectureModules.map(([title, detail]) => (
                 <div className="decision-row" key={title}>
-                  <b>{title}</b>
-                  <p>{detail}</p>
-                </div>
-              ))}
-            </article>
-
-            <article className="architecture-strip">
-              {pipelineSteps.map(([title, detail]) => (
-                <div key={title}>
                   <b>{title}</b>
                   <p>{detail}</p>
                 </div>
