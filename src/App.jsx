@@ -143,6 +143,14 @@ const analysisLanes = [
   ['架构层', 'RAG 审查', '召回历史代码切片和隐式规范，识别设计模式偏离与边界破坏。'],
 ]
 
+const analysisProgress = [
+  ['Webhook 接收', '获取 PR Diff、Issue、作者、标签和 CI 状态。'],
+  ['拦截层扫描', '执行硬性规则，优先发现权限、租户、SQL、测试缺口。'],
+  ['意图层对齐', '比较 Issue 目标、PR 标题和 Diff 行为是否一致。'],
+  ['架构层召回', '从隐式规范和历史代码切片中召回设计模式。'],
+  ['报告发布', '生成变更验收报告、Blocker 和 Checklist。'],
+]
+
 const intentSignals = [
   {
     label: 'Issue 目标',
@@ -485,6 +493,7 @@ function App() {
   const [minSeverity, setMinSeverity] = useState('P1')
   const [confidence, setConfidence] = useState(80)
   const [feedback, setFeedback] = useState('useful')
+  const [progressStep, setProgressStep] = useState(analysisProgress.length - 1)
 
   const visibleFindings = useMemo(() => {
     return review.findings.filter(
@@ -515,13 +524,20 @@ function App() {
 
   async function runAnalysis() {
     setIsAnalyzing(true)
+    setProgressStep(0)
     setStatusMessage('正在从 GitHub 获取 PR 元数据、变更文件和 Patch，并启动三路并发分析...')
 
     try {
+      analysisProgress.forEach((_, index) => {
+        window.setTimeout(() => {
+          setProgressStep(index)
+        }, index * 260)
+      })
       const liveReview = await fetchGitHubPullRequest(prUrl)
       setReview(liveReview)
       setActiveFindingId(liveReview.findings[0].id)
       setActiveView('评审工作台')
+      setProgressStep(analysisProgress.length - 1)
       setStatusMessage('已完成公开 PR 分析。私有仓库、企业规范和内部文档会在 GitHub App 版本中接入。')
     } catch (error) {
       setReview({
@@ -531,6 +547,7 @@ function App() {
       })
       setActiveFindingId(sampleReview.findings[0].id)
       setActiveView('评审工作台')
+      setProgressStep(analysisProgress.length - 1)
       setStatusMessage(`${error.message} 当前回退到内置演示 PR，保证评审流程可继续体验。`)
     } finally {
       setIsAnalyzing(false)
@@ -727,6 +744,25 @@ function App() {
                   <p>{detail}</p>
                 </div>
               ))}
+            </section>
+
+            <section className="progress-panel" aria-label="分析进度">
+              <div className="section-heading">
+                <span>GitHub CI/CD 状态</span>
+                <strong>{isAnalyzing ? 'Running...' : review.ciStatus}</strong>
+              </div>
+              <div className="progress-steps">
+                {analysisProgress.map(([title, detail], index) => {
+                  const state = index < progressStep ? 'done' : index === progressStep ? 'active' : 'pending'
+
+                  return (
+                    <div className={`progress-step ${state}`} key={title}>
+                      <b>{title}</b>
+                      <p>{detail}</p>
+                    </div>
+                  )
+                })}
+              </div>
             </section>
 
             <section className="evidence-grid" aria-label="意图与架构证据">
