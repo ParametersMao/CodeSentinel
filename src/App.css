@@ -148,6 +148,8 @@
 .lane-card,
 .blocker-card,
 .checklist-card,
+.intent-panel,
+.rag-panel,
 .architecture-strip {
   max-width: 100%;
   background: #ffffff;
@@ -448,6 +450,73 @@ h2 {
   display: block;
   margin: 6px 0;
   font-size: 14px;
+}
+
+.evidence-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.intent-panel,
+.rag-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.signal-list,
+.rag-list {
+  display: grid;
+  gap: 10px;
+}
+
+.signal-row,
+.rag-row {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.signal-row {
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.signal-row span,
+.rag-row b {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.signal-row p,
+.rag-row p {
+  overflow-wrap: anywhere;
+  color: #526071;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.signal-row em,
+.rag-row span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+  padding: 4px 8px;
+}
+
+.signal-row:nth-child(2) em,
+.signal-row:nth-child(3) em {
+  background: #fff7ed;
+  color: #9a4c0f;
 }
 
 .acceptance-report {
@@ -975,6 +1044,7 @@ h2 {
   .setup-grid,
   .flow-grid,
   .lane-grid,
+  .evidence-grid,
   .acceptance-report,
   .secondary-view,
   .secondary-view.compact,
@@ -1032,7 +1102,9 @@ h2 {
   .setup-panel,
   .config-panel,
   .blocker-card,
-  .checklist-card {
+  .checklist-card,
+  .intent-panel,
+  .rag-panel {
     padding: 12px;
   }
 
@@ -1055,6 +1127,10 @@ h2 {
 
   .section-heading {
     align-items: flex-start;
+  }
+
+  .signal-row {
+    grid-template-columns: 1fr;
   }
 
   .diff-row {

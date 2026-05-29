@@ -143,6 +143,42 @@ const analysisLanes = [
   ['架构层', 'RAG 审查', '召回历史代码切片和隐式规范，识别设计模式偏离与边界破坏。'],
 ]
 
+const intentSignals = [
+  {
+    label: 'Issue 目标',
+    value: '提升保护分支合并性能，同时不降低权限校验强度。',
+    status: '匹配',
+  },
+  {
+    label: 'Diff 行为',
+    value: '新增缓存命中快速返回路径，但权限校验被移动到返回之后。',
+    status: '偏离',
+  },
+  {
+    label: '结论',
+    value: '性能优化目标成立，但实现方式与“不可绕过保护分支”的需求约束冲突。',
+    status: '需处理',
+  },
+]
+
+const ragMatches = [
+  {
+    file: 'core/security/branch-policy.ts',
+    rule: '保护分支校验必须先于缓存、合并状态和外部检查结果。',
+    similarity: 92,
+  },
+  {
+    file: 'service/review-query.ts',
+    rule: '所有组织级数据查询必须显式携带 orgId，并在 repository 测试中断言隔离。',
+    similarity: 88,
+  },
+  {
+    file: '.ai-reviewer.yml',
+    rule: 'auth、tenant、billing、release 路径出现 P0/P1 风险时默认进入合并拦截。',
+    similarity: 85,
+  },
+]
+
 const architectureModules = [
   ['接入层 Webhook & API', '监听 GitHub pull_request 事件，获取 Diff、PR 元数据、Issue 描述、CI 状态和作者信息。'],
   ['上下文引擎 Context Engine', '读取 .ai-reviewer.yml、依赖配置、完整文件、调用链和测试文件，组织模型可用上下文。'],
@@ -645,6 +681,40 @@ function App() {
                   <p>{detail}</p>
                 </div>
               ))}
+            </section>
+
+            <section className="evidence-grid" aria-label="意图与架构证据">
+              <article className="intent-panel">
+                <div className="section-heading">
+                  <span>意图层分析</span>
+                  <strong>Issue vs Diff</strong>
+                </div>
+                <div className="signal-list">
+                  {intentSignals.map((signal) => (
+                    <div className="signal-row" key={signal.label}>
+                      <span>{signal.label}</span>
+                      <p>{signal.value}</p>
+                      <em>{signal.status}</em>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="rag-panel">
+                <div className="section-heading">
+                  <span>架构层 RAG</span>
+                  <strong>隐式规范召回</strong>
+                </div>
+                <div className="rag-list">
+                  {ragMatches.map((match) => (
+                    <div className="rag-row" key={match.file}>
+                      <b>{match.file}</b>
+                      <p>{match.rule}</p>
+                      <span>{match.similarity}% 相似</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
             </section>
 
             <section className="acceptance-report" aria-label="PR 首页自动回复">
