@@ -3,6 +3,8 @@ import './App.css'
 
 const samplePrUrl = 'https://github.com/acme/codesentinel/pull/421'
 
+const severityRank = { P0: 3, P1: 2, P2: 1 }
+
 const sampleReview = {
   source: '演示样例',
   status: 'ready',
@@ -24,7 +26,7 @@ const sampleReview = {
     testsMissing: 2,
   },
   summary:
-    '这个 PR 为合并决策增加缓存、更新开发者 Agent 使用的 Review Prompt，并调整了评审摘要卡片。主要风险集中在权限校验顺序和租户隔离数据查询。QA 建议重点覆盖保护分支拒绝合并、缓存失效场景和组织数据隔离。',
+    '本次 PR 增加合并决策缓存，调整 Review Prompt 与摘要卡片逻辑。主要风险集中在保护分支权限校验顺序、租户数据隔离和 Agent 自动修复指令。建议 QA 覆盖保护分支拒绝合并、缓存失效和组织数据隔离场景。',
   findings: [
     {
       id: 'auth-bypass',
@@ -36,7 +38,7 @@ const sampleReview = {
       owner: '代码产物',
       impact: '当分支规则缓存命中时，拥有普通写权限的用户可能绕过保护分支校验并完成合并。',
       evidence: '新增的快速返回路径发生在 validateBranchProtection 之前。',
-      suggestion: '把 validateBranchProtection 前置到缓存返回之前，并补充缓存命中场景的回归测试。',
+      suggestion: '将 validateBranchProtection 前置到缓存返回之前，并补充缓存命中场景的回归测试。',
     },
     {
       id: 'tenant-leak',
@@ -47,7 +49,7 @@ const sampleReview = {
       confidence: 89,
       owner: '人类负责人',
       impact: '企业客户可能在评审看板中看到其他组织的 Review 元数据。',
-      evidence: '旧逻辑里的 orgId 条件被删除，但底层仍然使用共享 reviews 表。',
+      evidence: '旧逻辑中的 orgId 条件被删除，但底层仍然使用共享 reviews 表。',
       suggestion: '恢复 orgId 查询条件，并在 repository 测试夹具中加入组织隔离断言。',
     },
     {
@@ -55,12 +57,12 @@ const sampleReview = {
       severity: 'P1',
       file: 'prompts/reviewer.md',
       line: 36,
-      title: '自动修复 Prompt 可能导致循环改代码',
+      title: '自动修复 Prompt 可能导致循环改写',
       confidence: 82,
       owner: 'AI Agent 轨迹',
       impact: '开发者 Agent 可能反复重写同一段代码，却没有说明失败原因和取舍。',
       evidence: 'Prompt 要求修复问题，但没有要求引用失败检查、解释补丁或设置停止条件。',
-      suggestion: '要求 Agent 引用失败检查、解释修改原因，并在一次重试仍失败后停止自动改写。',
+      suggestion: '要求 Agent 引用失败检查、说明修改原因，并在一次重试仍失败后停止自动改写。',
     },
     {
       id: 'summary-noise',
@@ -87,6 +89,8 @@ const sampleReview = {
   ],
 }
 
+const views = ['评审工作台', '系统设计', '团队洞察']
+
 const pipelineSteps = [
   ['获取', '通过 GitHub App 或公开 API 获取 PR Diff、完整文件、检查状态、标签和作者信息。'],
   ['理解', '补充调用链、依赖配置、测试文件、需求描述和团队代码规范。'],
@@ -95,7 +99,11 @@ const pipelineSteps = [
   ['发布', '异步写入 PR 摘要、行级评论、侧边报告和反馈事件。'],
 ]
 
-const severityRank = { P0: 3, P1: 2, P2: 1 }
+const designDecisions = [
+  ['模型选择', 'MVP 用可解释规则模拟 AI 分析；生产版按任务路由模型，摘要优先速度与成本，风险识别优先推理质量。'],
+  ['上下文获取', '先拿 Diff，再补完整文件、依赖配置、测试文件和需求背景，避免只看几行代码导致误判。'],
+  ['误报控制', '默认只主动暴露 P0/P1，P2 进入报告，不直接打断开发者。反馈数据用于后续校准。'],
+]
 
 function parseGitHubPullUrl(url) {
   const match = url.trim().match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i)
@@ -120,11 +128,10 @@ async function fetchGitHubPullRequest(url) {
   ])
 
   if (!prResponse.ok || !filesResponse.ok) {
-    throw new Error('GitHub 暂时无法返回该 PR。公开 PR 可直接分析；私有仓库需要在下一版接入 GitHub App Token。')
+    throw new Error('GitHub 暂时无法返回该 PR。公开 PR 可直接分析；私有仓库需要下一版接入 GitHub App Token。')
   }
 
   const [pr, files] = await Promise.all([prResponse.json(), filesResponse.json()])
-
   return buildReviewFromGitHub({ owner, repo, pr, files })
 }
 
@@ -143,7 +150,6 @@ function buildReviewFromGitHub({ owner, repo, pr, files }) {
     evidence: '规则已扫描权限、租户隔离、注入、危险 DOM、Prompt 循环和缺少测试等信号。',
     suggestion: '合并前运行强推理模型 Review，并确认项目测试或 CI 已覆盖核心路径。',
   }
-
   const activeFindings = findings.length > 0 ? findings : [fallbackFinding]
   const firstPatchFile = files.find((file) => file.patch) ?? files[0]
 
@@ -175,6 +181,7 @@ function buildReviewFromGitHub({ owner, repo, pr, files }) {
 
 function analyzeFiles(files) {
   const findings = []
+  const hasTestFile = files.some((candidate) => candidate.filename.toLowerCase().includes('test'))
 
   files.forEach((file, fileIndex) => {
     const patch = file.patch ?? ''
@@ -190,7 +197,7 @@ function analyzeFiles(files) {
     const line = firstAddedLineNumber(patch)
 
     if (/auth|permission|role|policy|token|session/.test(lowerName) && /return|cache|skip|bypass|allow/i.test(added)) {
-      findings.push(makeFinding(file, fileIndex, 'P0', line, '权限敏感路径发生变更', 91, '代码产物', '权限或认证相关文件中新增了快速返回、缓存或放行逻辑。', '安全敏感代码的小顺序调整也可能绕过策略校验，需要深度评审。', '要求补充明确的授权测试，并确认任何快速路径之前都已执行权限校验。'))
+      findings.push(makeFinding(file, fileIndex, 'P0', line, '权限敏感路径发生变更', 91, '代码产物', '权限或认证相关文件中新增了快速返回、缓存或放行逻辑。', '安全敏感代码的小顺序调整也可能绕过策略校验，需要深度评审。', '补充明确的授权测试，并确认任何快速路径之前都已执行权限校验。'))
     }
 
     if (/(tenant|orgId|workspaceId|accountId)/i.test(removed) && !/(tenant|orgId|workspaceId|accountId)/i.test(added)) {
@@ -209,7 +216,7 @@ function analyzeFiles(files) {
       findings.push(makeFinding(file, fileIndex, 'P1', line, 'Agent 指令可能导致自动修复循环', 82, 'AI Agent 轨迹', 'Prompt 或 Agent 工作流文件中新增了修复、重试或循环相关指令。', 'AI 生成代码的流程风险在于重复产出弱补丁，却没有失败解释和停止条件。', '要求 Agent 引用证据、说明测试，并在一次失败重试后停止自动改写。'))
     }
 
-    if (!lowerName.includes('test') && !files.some((candidate) => candidate.filename.toLowerCase().includes('test'))) {
+    if (!lowerName.includes('test') && !hasTestFile) {
       findings.push(makeFinding(file, fileIndex, 'P2', line, '未检测到相邻测试变更', 72, '代码产物', 'PR 修改了生产代码，但前 100 个文件中未出现 test 类文件。', '这不一定是错误，但会增加 Review 和回归验证成本。', '要求作者或编码 Agent 补充聚焦测试，或说明已有覆盖为什么足够。'))
     }
   })
@@ -293,7 +300,7 @@ function createSummary(pr, files, findings) {
     .slice(0, 3)
   const riskText = riskyFiles.length > 0 ? `风险重点：${riskyFiles.join('、')}。` : 'MVP 规则未发现阻断级风险。'
   const testText = files.some((file) => file.filename.toLowerCase().includes('test'))
-    ? '本 PR 包含测试文件变更，评审人应确认测试是否覆盖高风险路径。'
+    ? '该 PR 包含测试文件变更，评审人应确认测试是否覆盖高风险路径。'
     : '未在拉取到的文件列表中检测到测试文件，QA 需要明确回归范围。'
 
   return `${pr.title}。该 PR 修改 ${files.length} 个文件，触及 ${compactNumber(pr.additions + pr.deletions)} 行。${riskText}${testText}`
@@ -311,6 +318,17 @@ function compactNumber(value) {
   return String(value)
 }
 
+function statusLabel(status) {
+  const labels = {
+    ready: '已接入',
+    demo: '演示',
+    planned: '规划中',
+    partial: '部分',
+  }
+
+  return labels[status] ?? status
+}
+
 function contextSources(review) {
   return [
     ['Git Diff', `${review.metrics.changedLines} 行变更`, 'ready'],
@@ -324,9 +342,10 @@ function contextSources(review) {
 function App() {
   const [prUrl, setPrUrl] = useState(samplePrUrl)
   const [review, setReview] = useState(sampleReview)
-  const [statusMessage, setStatusMessage] = useState('MVP 已加载演示 PR。你可以粘贴公开 GitHub PR 链接，系统会拉取元数据和文件 Patch 进行分析。')
+  const [statusMessage, setStatusMessage] = useState('已加载演示 PR。你也可以粘贴公开 GitHub PR 链接，系统会拉取元数据和文件 Patch 进行分析。')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [activeFindingId, setActiveFindingId] = useState(sampleReview.findings[0].id)
+  const [activeView, setActiveView] = useState(views[0])
   const [minSeverity, setMinSeverity] = useState('P1')
   const [confidence, setConfidence] = useState(80)
   const [feedback, setFeedback] = useState('useful')
@@ -348,6 +367,8 @@ function App() {
     )
   }, [activeFindingId, review.findings, visibleFindings])
 
+  const visibleHighRisks = visibleFindings.filter((finding) => severityRank[finding.severity] >= severityRank.P1).length
+
   async function runAnalysis() {
     setIsAnalyzing(true)
     setStatusMessage('正在从 GitHub 获取 PR 元数据、变更文件和 Patch...')
@@ -356,7 +377,7 @@ function App() {
       const liveReview = await fetchGitHubPullRequest(prUrl)
       setReview(liveReview)
       setActiveFindingId(liveReview.findings[0].id)
-      setStatusMessage('已完成公开 PR 分析。私有仓库、企业规范和内部文档将在 GitHub App 版本中接入。')
+      setStatusMessage('已完成公开 PR 分析。私有仓库、企业规范和内部文档会在 GitHub App 版本中接入。')
     } catch (error) {
       setReview({
         ...sampleReview,
@@ -380,35 +401,54 @@ function App() {
             <span>代码哨兵 AI Review</span>
           </div>
         </div>
+
         <nav>
-          {['评审队列', '风险雷达', '团队规范', '模型路由', '效能洞察'].map((item, index) => (
-            <button className={index === 0 ? 'nav-item active' : 'nav-item'} key={item}>
+          {views.map((item) => (
+            <button
+              className={activeView === item ? 'nav-item active' : 'nav-item'}
+              key={item}
+              type="button"
+              onClick={() => setActiveView(item)}
+            >
               <span>{item}</span>
-              {index === 0 && <b>{review.findings.length}</b>}
+              {item === '评审工作台' && <b>{visibleHighRisks}</b>}
             </button>
           ))}
         </nav>
+
         <div className="sidebar-note">
           <span>当前策略</span>
-          <strong>只主动评论 P0/P1</strong>
-          <p>P2 建议默认留在报告里，避免 AI 评论打扰开发者。</p>
+          <strong>只主动评论 P0 / P1</strong>
+          <p>P2 建议默认留在报告里，减少 AI 评论打扰，让开发者先处理真正影响合并的事项。</p>
         </div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div className="pr-input">
-            <label htmlFor="pr-url">GitHub PR 链接</label>
-            <input
-              id="pr-url"
-              value={prUrl}
-              onChange={(event) => setPrUrl(event.target.value)}
-              placeholder="https://github.com/owner/repo/pull/123"
-            />
+          <div>
+            <span className="eyebrow">AI 辅助 Pull Request Review</span>
+            <h1>先判断能不能合，再解释为什么。</h1>
           </div>
-          <button className="primary-button" type="button" onClick={runAnalysis} disabled={isAnalyzing}>
-            {isAnalyzing ? '分析中...' : '开始分析'}
-          </button>
+          <form
+            className="pr-input"
+            onSubmit={(event) => {
+              event.preventDefault()
+              runAnalysis()
+            }}
+          >
+            <label htmlFor="pr-url">GitHub PR 链接</label>
+            <div className="input-row">
+              <input
+                id="pr-url"
+                value={prUrl}
+                onChange={(event) => setPrUrl(event.target.value)}
+                placeholder="https://github.com/owner/repo/pull/123"
+              />
+              <button className="primary-button" type="submit" disabled={isAnalyzing}>
+                {isAnalyzing ? '分析中...' : '开始分析'}
+              </button>
+            </div>
+          </form>
         </header>
 
         <div className={`status-banner ${review.status === 'fallback' ? 'warning' : ''}`}>
@@ -416,201 +456,210 @@ function App() {
           <span>{statusMessage}</span>
         </div>
 
-        <section className="summary-row">
-          <article className="summary-panel">
-            <div className="section-heading">
-              <span>PR 摘要</span>
-              <strong>{isAnalyzing ? '正在生成草稿' : review.summaryStatus}</strong>
-            </div>
-            <h1>{review.pr.title}</h1>
-            <p>{review.summary}</p>
-            <div className="pr-meta">
-              <span>{review.pr.repo}</span>
-              <span>#{review.pr.number}</span>
-              <span>{review.pr.branch} 合入 {review.pr.base}</span>
-              <span>提交人 {review.pr.author}</span>
-            </div>
-            <div className="summary-metrics">
-              <span><strong>{review.metrics.files}</strong> 个文件</span>
-              <span><strong>{review.metrics.changedLines}</strong> 行变更</span>
-              <span><strong>{review.metrics.highRiskPaths}</strong> 个高风险路径</span>
-              <span><strong>{review.metrics.testsMissing}</strong> 个测试缺口</span>
-            </div>
-          </article>
-
-          <article className="target-panel">
-            <div className="section-heading">
-              <span>评审对象</span>
-              <strong>AI 时代责任边界</strong>
-            </div>
-            <div className="target-grid">
-              <div>
-                <b>代码产物</b>
-                <p>这次 Diff 是否破坏正确性、安全性和可维护性？</p>
-              </div>
-              <div>
-                <b>AI Agent 轨迹</b>
-                <p>生成过程是否出现浅层修复、循环改写或缺少依据？</p>
-              </div>
-              <div>
-                <b>人类负责人</b>
-                <p>谁来确认业务意图、风险取舍和上线责任？</p>
-              </div>
-            </div>
-          </article>
-        </section>
-
-        <section className="review-grid">
-          <article className="findings-panel">
-            <div className="section-heading">
-              <span>风险发现</span>
-              <strong>{visibleFindings.length} 条可见</strong>
-            </div>
-            <div className="filters" aria-label="降噪控制">
-              <label>
-                最低级别
-                <select value={minSeverity} onChange={(event) => setMinSeverity(event.target.value)}>
-                  <option>P0</option>
-                  <option>P1</option>
-                  <option>P2</option>
-                </select>
-              </label>
-              <label>
-                置信度 {confidence}%
-                <input
-                  min="60"
-                  max="95"
-                  step="5"
-                  type="range"
-                  value={confidence}
-                  onChange={(event) => setConfidence(Number(event.target.value))}
-                />
-              </label>
-            </div>
-            <div className="findings-list">
-              {visibleFindings.length === 0 && (
-                <div className="empty-state">
-                  当前降噪条件下没有可见风险项。
+        {activeView === '评审工作台' && (
+          <>
+            <section className="summary-panel">
+              <div className="summary-copy">
+                <div className="section-heading">
+                  <span>PR 摘要</span>
+                  <strong>{isAnalyzing ? '正在生成草稿' : review.summaryStatus}</strong>
                 </div>
-              )}
-              {visibleFindings.map((finding) => (
-                <button
-                  className={selectedFinding.id === finding.id ? 'finding-card active' : 'finding-card'}
-                  key={finding.id}
-                  type="button"
-                  onClick={() => setActiveFindingId(finding.id)}
-                >
-                  <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
-                  <span className="finding-title">{finding.title}</span>
-                  <span>{finding.file}:{finding.line}</span>
-                  <b>{finding.confidence}%</b>
-                </button>
-              ))}
-            </div>
-          </article>
+                <h2>{review.pr.title}</h2>
+                <p>{review.summary}</p>
+                <div className="pr-meta">
+                  <span>{review.pr.repo}</span>
+                  <span>#{review.pr.number}</span>
+                  <span>{review.pr.branch} 合入 {review.pr.base}</span>
+                  <span>提交人 {review.pr.author}</span>
+                </div>
+              </div>
 
-          <article className="diff-panel">
-            <div className="section-heading">
-              <span>行级 Review</span>
-              <strong>{selectedFinding.file}:{selectedFinding.line}</strong>
-            </div>
-            <div className="diff-viewer" aria-label="代码 Diff 视图">
-              {review.diffRows.map((row, index) => (
-                <div className={`diff-row ${row.type}`} key={`${index}-${row.old}-${row.next}-${row.code}`}>
-                  <span>{row.old}</span>
-                  <span>{row.next}</span>
-                  <code>{row.code}</code>
+              <div className="summary-metrics" aria-label="关键指标">
+                <span><strong>{review.metrics.files}</strong> 文件</span>
+                <span><strong>{review.metrics.changedLines}</strong> 变更行</span>
+                <span><strong>{review.metrics.highRiskPaths}</strong> 高风险</span>
+                <span><strong>{review.metrics.testsMissing}</strong> 测试缺口</span>
+              </div>
+            </section>
+
+            <section className="review-grid">
+              <article className="findings-panel">
+                <div className="section-heading">
+                  <span>需要先看的风险</span>
+                  <strong>{visibleFindings.length} 条</strong>
+                </div>
+                <div className="filters" aria-label="降噪控制">
+                  <label>
+                    最低级别
+                    <select value={minSeverity} onChange={(event) => setMinSeverity(event.target.value)}>
+                      <option>P0</option>
+                      <option>P1</option>
+                      <option>P2</option>
+                    </select>
+                  </label>
+                  <label>
+                    置信度 {confidence}%
+                    <input
+                      min="60"
+                      max="95"
+                      step="5"
+                      type="range"
+                      value={confidence}
+                      onChange={(event) => setConfidence(Number(event.target.value))}
+                    />
+                  </label>
+                </div>
+                <div className="findings-list">
+                  {visibleFindings.length === 0 && (
+                    <div className="empty-state">当前降噪条件下没有可见风险项。</div>
+                  )}
+                  {visibleFindings.map((finding) => (
+                    <button
+                      className={selectedFinding.id === finding.id ? 'finding-card active' : 'finding-card'}
+                      key={finding.id}
+                      type="button"
+                      onClick={() => setActiveFindingId(finding.id)}
+                    >
+                      <span className={`severity ${finding.severity.toLowerCase()}`}>{finding.severity}</span>
+                      <span className="finding-title">{finding.title}</span>
+                      <span>{finding.file}:{finding.line}</span>
+                      <b>{finding.confidence}%</b>
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              <article className="diff-panel">
+                <div className="section-heading">
+                  <span>行级 Review</span>
+                  <strong>{selectedFinding.file}:{selectedFinding.line}</strong>
+                </div>
+                <div className="diff-viewer" aria-label="代码 Diff 视图">
+                  {review.diffRows.map((row, index) => (
+                    <div className={`diff-row ${row.type}`} key={`${index}-${row.old}-${row.next}-${row.code}`}>
+                      <span>{row.old}</span>
+                      <span>{row.next}</span>
+                      <code>{row.code}</code>
+                    </div>
+                  ))}
+                </div>
+                <div className="inline-comment">
+                  <div className="comment-header">
+                    <span className={`severity ${selectedFinding.severity.toLowerCase()}`}>{selectedFinding.severity}</span>
+                    <strong>{selectedFinding.title}</strong>
+                    <em>{selectedFinding.owner}</em>
+                  </div>
+                  <p>{selectedFinding.impact}</p>
+                  <p><b>证据：</b>{selectedFinding.evidence}</p>
+                  <div className="suggestion-block">
+                    <span>修改建议</span>
+                    <code>{selectedFinding.suggestion}</code>
+                  </div>
+                  <div className="comment-actions">
+                    <button type="button">采纳建议</button>
+                    <button
+                      className={feedback === 'useful' ? 'active' : ''}
+                      type="button"
+                      onClick={() => setFeedback('useful')}
+                    >
+                      有帮助
+                    </button>
+                    <button
+                      className={feedback === 'noisy' ? 'active' : ''}
+                      type="button"
+                      onClick={() => setFeedback('noisy')}
+                    >
+                      太打扰
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </section>
+          </>
+        )}
+
+        {activeView === '系统设计' && (
+          <section className="secondary-view">
+            <article className="context-panel">
+              <div className="section-heading">
+                <span>上下文管线</span>
+                <strong>5 类来源</strong>
+              </div>
+              <div className="source-list">
+                {contextSources(review).map(([name, detail, status]) => (
+                  <div className="source-row" key={name}>
+                    <span>{name}</span>
+                    <b>{detail}</b>
+                    <em className={status}>{statusLabel(status)}</em>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="decision-panel">
+              <div className="section-heading">
+                <span>产品取舍</span>
+                <strong>准确性 / 速度 / 降噪</strong>
+              </div>
+              {designDecisions.map(([title, detail]) => (
+                <div className="decision-row" key={title}>
+                  <b>{title}</b>
+                  <p>{detail}</p>
                 </div>
               ))}
-            </div>
-            <div className="inline-comment">
-              <div className="comment-header">
-                <span className={`severity ${selectedFinding.severity.toLowerCase()}`}>{selectedFinding.severity}</span>
-                <strong>{selectedFinding.title}</strong>
-                <em>{selectedFinding.owner}</em>
-              </div>
-              <p>{selectedFinding.impact}</p>
-              <p><b>证据：</b>{selectedFinding.evidence}</p>
-              <div className="suggestion-block">
-                <span>修改建议</span>
-                <code>{selectedFinding.suggestion}</code>
-              </div>
-              <div className="comment-actions">
-                <button type="button">采纳建议</button>
-                <button
-                  className={feedback === 'useful' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setFeedback('useful')}
-                >
-                  有帮助
-                </button>
-                <button
-                  className={feedback === 'noisy' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setFeedback('noisy')}
-                >
-                  太打扰
-                </button>
-              </div>
-            </div>
-          </article>
+            </article>
 
-          <aside className="context-panel">
-            <div className="section-heading">
-              <span>上下文管线</span>
-              <strong>5 类来源</strong>
-            </div>
-            <div className="source-list">
-              {contextSources(review).map(([name, detail, status]) => (
-                <div className="source-row" key={name}>
-                  <span>{name}</span>
-                  <b>{detail}</b>
-                  <em className={status}>{statusLabel(status)}</em>
+            <article className="architecture-strip">
+              {pipelineSteps.map(([title, detail]) => (
+                <div key={title}>
+                  <b>{title}</b>
+                  <p>{detail}</p>
                 </div>
               ))}
-            </div>
+            </article>
+          </section>
+        )}
 
-            <div className="model-box">
-              <span>模型路由</span>
-              <div>
-                <b>快速摘要模型</b>
-                <p>MVP 当前使用本地摘要逻辑；生产版本会路由到低成本快速模型。</p>
+        {activeView === '团队洞察' && (
+          <section className="secondary-view compact">
+            <article className="decision-panel">
+              <div className="section-heading">
+                <span>评审对象</span>
+                <strong>AI 时代的责任边界</strong>
               </div>
-              <div>
-                <b>深度风险模型</b>
-                <p>强推理模型只分析权限、数据访问、Prompt 和高风险文件，控制成本与延迟。</p>
+              <div className="target-list">
+                <div>
+                  <b>代码产物</b>
+                  <p>这次 Diff 是否破坏正确性、安全性、可维护性和可测试性。</p>
+                </div>
+                <div>
+                  <b>AI Agent 轨迹</b>
+                  <p>生成过程是否出现浅层修复、循环改写、缺少证据或没有测试假设。</p>
+                </div>
+                <div>
+                  <b>人类负责人</b>
+                  <p>谁来确认业务意图、风险取舍和上线责任。</p>
+                </div>
               </div>
-            </div>
+            </article>
 
-            <div className="roadmap-box">
-              <span>后续扩展</span>
-              <p>IDE 预审、GitHub App 鉴权、私有仓库上下文、自动修复分支和研发质量看板。</p>
-            </div>
-          </aside>
-        </section>
-
-        <section className="architecture-strip">
-          {pipelineSteps.map(([title, detail]) => (
-            <div key={title}>
-              <b>{title}</b>
-              <p>{detail}</p>
-            </div>
-          ))}
-        </section>
+            <article className="roadmap-panel">
+              <div className="section-heading">
+                <span>未来扩展</span>
+                <strong>从 PR 后移到研发全流程</strong>
+              </div>
+              <ul>
+                <li>IDE 预审：在 VS Code 或 JetBrains 中提前发现问题。</li>
+                <li>自动修复分支：系统创建修复分支并运行单元测试。</li>
+                <li>团队反馈校准：根据采纳、拒绝和忽略行为优化建议质量。</li>
+                <li>研发质量看板：沉淀常见风险类型、Review 耗时和质量趋势。</li>
+              </ul>
+            </article>
+          </section>
+        )}
       </section>
     </main>
   )
-}
-
-function statusLabel(status) {
-  const labels = {
-    ready: '已接入',
-    demo: '演示',
-    planned: '规划中',
-    partial: '部分',
-  }
-
-  return labels[status] ?? status
 }
 
 export default App
