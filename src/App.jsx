@@ -221,6 +221,12 @@ const platformIntegrations = [
   },
 ]
 
+const calibrationActions = [
+  ['误报聚类', '把“太打扰”的建议按规则、文件路径和模型来源聚类，下次降低同类 P2 的主动曝光。'],
+  ['阈值调整', '当某类建议连续被忽略或点踩时，提高置信度阈值，只保留证据更强的评论。'],
+  ['规则沉淀', '高采纳建议会写回团队规范，形成组织级 Review 记忆。'],
+]
+
 const defaultReviewConfig = {
   projectType: 'monorepo',
   criticalPaths: 'core, api, service, domain',
@@ -537,7 +543,11 @@ function App() {
   const [reviewConfig, setReviewConfig] = useState(defaultReviewConfig)
   const [minSeverity, setMinSeverity] = useState('P1')
   const [confidence, setConfidence] = useState(80)
-  const [feedback, setFeedback] = useState('useful')
+  const [feedbackByFinding, setFeedbackByFinding] = useState({
+    'auth-bypass': 'useful',
+    'tenant-leak': 'useful',
+    'ai-loop': 'noisy',
+  })
   const [progressStep, setProgressStep] = useState(analysisProgress.length - 1)
 
   const visibleFindings = useMemo(() => {
@@ -563,9 +573,24 @@ function App() {
   const configPreview = buildConfigPreview(reviewConfig)
   const blockerRules = listToYamlArray(reviewConfig.blockers)
   const prCommentPreview = buildPrCommentPreview(review, blockerCount)
+  const selectedFeedback = feedbackByFinding[selectedFinding.id]
+  const feedbackCounts = review.findings.reduce(
+    (counts, finding) => {
+      const value = feedbackByFinding[finding.id]
+      if (value === 'useful') counts.useful += 1
+      else if (value === 'noisy') counts.noisy += 1
+      else counts.pending += 1
+      return counts
+    },
+    { useful: 0, noisy: 0, pending: 0 },
+  )
 
   function updateReviewConfig(field, value) {
     setReviewConfig((current) => ({ ...current, [field]: value }))
+  }
+
+  function recordFeedback(findingId, value) {
+    setFeedbackByFinding((current) => ({ ...current, [findingId]: value }))
   }
 
   async function runAnalysis() {
@@ -970,19 +995,26 @@ function App() {
                   <div className="comment-actions">
                     <button type="button">采纳建议</button>
                     <button
-                      className={feedback === 'useful' ? 'active' : ''}
+                      className={selectedFeedback === 'useful' ? 'active' : ''}
                       type="button"
-                      onClick={() => setFeedback('useful')}
+                      onClick={() => recordFeedback(selectedFinding.id, 'useful')}
                     >
                       有帮助
                     </button>
                     <button
-                      className={feedback === 'noisy' ? 'active' : ''}
+                      className={selectedFeedback === 'noisy' ? 'active' : ''}
                       type="button"
-                      onClick={() => setFeedback('noisy')}
+                      onClick={() => recordFeedback(selectedFinding.id, 'noisy')}
                     >
                       太打扰
                     </button>
+                  </div>
+                  <div className="feedback-note">
+                    {selectedFeedback === 'noisy'
+                      ? '已记录为噪声样本：后续会提高同类规则阈值，减少主动评论。'
+                      : selectedFeedback === 'useful'
+                        ? '已记录为有效建议：后续会提升同类规则权重。'
+                        : '等待评审人反馈，用于后续校准模型与规则。'}
                   </div>
                 </div>
               </article>
@@ -1043,39 +1075,61 @@ function App() {
         )}
 
         {activeView === '团队洞察' && (
-          <section className="secondary-view compact">
-            <article className="decision-panel">
-              <div className="section-heading">
-                <span>评审对象</span>
-                <strong>AI 时代的责任边界</strong>
-              </div>
-              <div className="target-list">
-                <div>
-                  <b>代码产物</b>
-                  <p>这次 Diff 是否破坏正确性、安全性、可维护性和可测试性。</p>
+          <section className="team-view">
+            <section className="secondary-view compact">
+              <article className="decision-panel">
+                <div className="section-heading">
+                  <span>评审对象</span>
+                  <strong>AI 时代的责任边界</strong>
                 </div>
-                <div>
-                  <b>AI Agent 轨迹</b>
-                  <p>生成过程是否出现浅层修复、循环改写、缺少证据或没有测试假设。</p>
+                <div className="target-list">
+                  <div>
+                    <b>代码产物</b>
+                    <p>这次 Diff 是否破坏正确性、安全性、可维护性和可测试性。</p>
+                  </div>
+                  <div>
+                    <b>AI Agent 轨迹</b>
+                    <p>生成过程是否出现浅层修复、循环改写、缺少证据或没有测试假设。</p>
+                  </div>
+                  <div>
+                    <b>人类负责人</b>
+                    <p>谁来确认业务意图、风险取舍和上线责任。</p>
+                  </div>
                 </div>
-                <div>
-                  <b>人类负责人</b>
-                  <p>谁来确认业务意图、风险取舍和上线责任。</p>
-                </div>
-              </div>
-            </article>
+              </article>
 
-            <article className="roadmap-panel">
+              <article className="roadmap-panel">
+                <div className="section-heading">
+                  <span>未来扩展</span>
+                  <strong>从 PR 后移到研发全流程</strong>
+                </div>
+                <ul>
+                  <li>IDE 预审：在 VS Code 或 JetBrains 中提前发现问题。</li>
+                  <li>自动修复分支：系统创建修复分支并运行单元测试。</li>
+                  <li>团队反馈校准：根据采纳、拒绝和忽略行为优化建议质量。</li>
+                  <li>研发质量看板：沉淀常见风险类型、Review 耗时和质量趋势。</li>
+                </ul>
+              </article>
+            </section>
+
+            <article className="calibration-panel">
               <div className="section-heading">
-                <span>未来扩展</span>
-                <strong>从 PR 后移到研发全流程</strong>
+                <span>误报反馈闭环</span>
+                <strong>降低 Alert Fatigue</strong>
               </div>
-              <ul>
-                <li>IDE 预审：在 VS Code 或 JetBrains 中提前发现问题。</li>
-                <li>自动修复分支：系统创建修复分支并运行单元测试。</li>
-                <li>团队反馈校准：根据采纳、拒绝和忽略行为优化建议质量。</li>
-                <li>研发质量看板：沉淀常见风险类型、Review 耗时和质量趋势。</li>
-              </ul>
+              <div className="feedback-metrics">
+                <span><strong>{feedbackCounts.useful}</strong> 有效建议</span>
+                <span><strong>{feedbackCounts.noisy}</strong> 噪声样本</span>
+                <span><strong>{feedbackCounts.pending}</strong> 待确认</span>
+              </div>
+              <div className="calibration-grid">
+                {calibrationActions.map(([title, detail]) => (
+                  <div className="calibration-card" key={title}>
+                    <b>{title}</b>
+                    <p>{detail}</p>
+                  </div>
+                ))}
+              </div>
             </article>
           </section>
         )}

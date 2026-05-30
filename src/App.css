@@ -153,6 +153,7 @@
 .progress-panel,
 .pr-comment-panel,
 .platform-panel,
+.calibration-panel,
 .architecture-strip {
   max-width: 100%;
   background: #ffffff;
@@ -1002,6 +1003,17 @@ h2 {
   color: #1d4ed8;
 }
 
+.feedback-note {
+  margin-top: 10px;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #526071;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px;
+}
+
 .secondary-view {
   display: grid;
   grid-template-columns: minmax(280px, 0.5fr) minmax(0, 1fr);
@@ -1009,6 +1021,11 @@ h2 {
 }
 
 .system-view {
+  display: grid;
+  gap: 16px;
+}
+
+.team-view {
   display: grid;
   gap: 16px;
 }
@@ -1067,6 +1084,63 @@ h2 {
 }
 
 .platform-card p {
+  color: #526071;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.calibration-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.feedback-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.feedback-metrics span {
+  min-height: 70px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  padding: 0 12px;
+}
+
+.feedback-metrics strong {
+  color: #111827;
+  font-size: 24px;
+}
+
+.calibration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calibration-card {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.calibration-card b {
+  display: block;
+  color: #172033;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.calibration-card p {
   color: #526071;
   font-size: 12px;
   line-height: 1.5;
@@ -1194,6 +1268,8 @@ h2 {
   .evidence-grid,
   .acceptance-report,
   .platform-grid,
+  .feedback-metrics,
+  .calibration-grid,
   .secondary-view,
   .secondary-view.compact,
   .architecture-strip {
@@ -1255,7 +1331,8 @@ h2 {
   .rag-panel,
   .progress-panel,
   .pr-comment-panel,
-  .platform-panel {
+  .platform-panel,
+  .calibration-panel {
     padding: 12px;
   }
 
