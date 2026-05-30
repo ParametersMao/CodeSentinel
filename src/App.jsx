@@ -227,6 +227,16 @@ const calibrationActions = [
   ['规则沉淀', '高采纳建议会写回团队规范，形成组织级 Review 记忆。'],
 ]
 
+const defaultMissedRisks = [
+  {
+    id: 'missed-release-lock',
+    title: '发布窗口缺少冻结校验',
+    file: 'src/release/window.ts',
+    owner: '人类负责人',
+    status: '待沉淀',
+  },
+]
+
 const defaultReviewConfig = {
   projectType: 'monorepo',
   criticalPaths: 'core, api, service, domain',
@@ -549,6 +559,12 @@ function App() {
     'ai-loop': 'noisy',
   })
   const [progressStep, setProgressStep] = useState(analysisProgress.length - 1)
+  const [missedRisks, setMissedRisks] = useState(defaultMissedRisks)
+  const [missedRiskDraft, setMissedRiskDraft] = useState({
+    title: '缓存命中时缺少审计日志',
+    file: 'src/api/merge.ts',
+    owner: '代码产物',
+  })
 
   const visibleFindings = useMemo(() => {
     return review.findings.filter(
@@ -591,6 +607,25 @@ function App() {
 
   function recordFeedback(findingId, value) {
     setFeedbackByFinding((current) => ({ ...current, [findingId]: value }))
+  }
+
+  function addMissedRisk() {
+    const title = missedRiskDraft.title.trim()
+    const file = missedRiskDraft.file.trim()
+
+    if (!title || !file) return
+
+    setMissedRisks((current) => [
+      {
+        id: `missed-${Date.now()}`,
+        title,
+        file,
+        owner: missedRiskDraft.owner,
+        status: '待沉淀',
+      },
+      ...current,
+    ])
+    setMissedRiskDraft((current) => ({ ...current, title: '', file: '' }))
   }
 
   async function runAnalysis() {
@@ -1129,6 +1164,61 @@ function App() {
                     <p>{detail}</p>
                   </div>
                 ))}
+              </div>
+            </article>
+
+            <article className="missed-panel">
+              <div className="section-heading">
+                <span>漏报控制</span>
+                <strong>{missedRisks.length} 条待沉淀</strong>
+              </div>
+              <div className="missed-layout">
+                <div className="missed-form" aria-label="补充漏报风险">
+                  <label>
+                    漏报标题
+                    <input
+                      value={missedRiskDraft.title}
+                      onChange={(event) => setMissedRiskDraft((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="例如：发布窗口缺少冻结校验"
+                    />
+                  </label>
+                  <label>
+                    相关文件
+                    <input
+                      value={missedRiskDraft.file}
+                      onChange={(event) => setMissedRiskDraft((current) => ({ ...current, file: event.target.value }))}
+                      placeholder="src/release/window.ts"
+                    />
+                  </label>
+                  <label>
+                    责任归因
+                    <select
+                      value={missedRiskDraft.owner}
+                      onChange={(event) => setMissedRiskDraft((current) => ({ ...current, owner: event.target.value }))}
+                    >
+                      <option>代码产物</option>
+                      <option>AI Agent 轨迹</option>
+                      <option>人类负责人</option>
+                    </select>
+                  </label>
+                  <button className="primary-button" type="button" onClick={addMissedRisk}>
+                    标记为漏报
+                  </button>
+                </div>
+
+                <div className="missed-list">
+                  {missedRisks.map((risk) => (
+                    <div className="missed-row" key={risk.id}>
+                      <b>{risk.title}</b>
+                      <span>{risk.file}</span>
+                      <em>{risk.owner} · {risk.status}</em>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="learning-path">
+                <span>沉淀路径</span>
+                <p>漏报会进入人工确认队列：高频漏报沉淀为硬规则，架构类漏报写入 RAG 样本，意图类漏报更新 Issue-Diff 对齐 Prompt。</p>
               </div>
             </article>
           </section>

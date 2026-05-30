@@ -154,6 +154,7 @@
 .pr-comment-panel,
 .platform-panel,
 .calibration-panel,
+.missed-panel,
 .architecture-strip {
   max-width: 100%;
   background: #ffffff;
@@ -1146,6 +1147,102 @@ h2 {
   line-height: 1.5;
 }
 
+.missed-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.missed-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.missed-form {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.missed-form label {
+  display: grid;
+  gap: 6px;
+  color: #526071;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.missed-form input,
+.missed-form select {
+  min-height: 38px;
+  border: 1px solid #ccd6e4;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #172033;
+  font: 650 13px/1.2 var(--font-ui);
+  padding: 0 11px;
+}
+
+.missed-list {
+  display: grid;
+  gap: 8px;
+}
+
+.missed-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.missed-row b {
+  color: #172033;
+  font-size: 13px;
+}
+
+.missed-row span {
+  color: #526071;
+  font: 12px/1.4 var(--font-mono);
+}
+
+.missed-row em {
+  width: fit-content;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a4c0f;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+  padding: 4px 8px;
+}
+
+.learning-path {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  border: 1px solid #c9dcff;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 12px;
+}
+
+.learning-path span {
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.learning-path p {
+  color: #36557d;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .source-row,
 .target-list div,
 .decision-row {
@@ -1270,6 +1367,7 @@ h2 {
   .platform-grid,
   .feedback-metrics,
   .calibration-grid,
+  .missed-layout,
   .secondary-view,
   .secondary-view.compact,
   .architecture-strip {
@@ -1332,8 +1430,13 @@ h2 {
   .progress-panel,
   .pr-comment-panel,
   .platform-panel,
-  .calibration-panel {
+  .calibration-panel,
+  .missed-panel {
     padding: 12px;
+  }
+
+  .missed-row {
+    grid-template-columns: 1fr;
   }
 
   h1 {
