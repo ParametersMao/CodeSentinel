@@ -11,6 +11,7 @@ npm run server:rules-check
 npm run server:model-check
 npm run server:rag-check
 npm run server:feedback-check
+npm run server:context-check
 npm run server:dev
 ```
 
@@ -34,10 +35,12 @@ http://127.0.0.1:8787
 ```bash
 PORT=8787
 GITHUB_WEBHOOK_SECRET=change-me
+GITHUB_TOKEN=
 GITHUB_APP_ID=
 GITHUB_PRIVATE_KEY=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+GITHUB_INSTALLATION_ID=
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 ```
@@ -58,6 +61,7 @@ Implemented:
 - Model route planning for summary, intent, risk, and architecture tasks with latency budget and fallback strategy.
 - Local RAG-style context retriever for implicit standards and changed-file patches.
 - JSONL feedback persistence for helpful, unhelpful, accepted, ignored, and missed-risk events.
+- GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
 
 Next:
 

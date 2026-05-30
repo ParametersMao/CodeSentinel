@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
+import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './github/contextClient.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
@@ -15,6 +16,7 @@ const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
+const githubToken = process.env.GITHUB_TOKEN ?? ''
 
 function jsonResponse(response, statusCode, body) {
   const payload = JSON.stringify(body, null, 2)
@@ -61,16 +63,18 @@ async function handleGitHubWebhook(request, response) {
 
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const job = createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
+  const githubContext = await loadGitHubContextForPayload(payload, loadedConfig.config)
+  const analysisFiles = buildAnalysisFiles(payload, githubContext)
   const ruleAnalysis = runRuleEngine({
     job,
     reviewConfig: loadedConfig.config,
-    files: payload.files ?? [],
+    files: analysisFiles,
   })
   const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
   const ragContext = retrieveReviewContext({
     query: [job.pullRequest.title, job.pullRequest.head, ruleAnalysis.findings.map((finding) => finding.rule).join(' ')].join(' '),
     reviewConfig: loadedConfig.config,
-    files: payload.files ?? [],
+    files: analysisFiles,
   })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
@@ -82,6 +86,7 @@ async function handleGitHubWebhook(request, response) {
       review: loadedConfig.config.review,
     },
     job,
+    githubContext,
     ruleAnalysis,
     modelRoutePlan,
     ragContext,
@@ -102,7 +107,8 @@ async function handleRuleAnalysis(request, response) {
 
   const payload = input.payload ?? createExamplePullRequestPayload()
   const eventName = input.eventName ?? 'pull_request'
-  const files = Array.isArray(input.files) ? input.files : payload.files ?? []
+  const githubContext = input.githubContext ?? (input.fetchGitHubContext ? await loadGitHubContextForPayload(payload, loadedConfig.config) : null)
+  const files = Array.isArray(input.files) ? input.files : buildAnalysisFiles(payload, githubContext)
   const job = input.job ?? createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
   const ruleAnalysis = runRuleEngine({ job, reviewConfig: loadedConfig.config, files })
   const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
@@ -120,10 +126,42 @@ async function handleRuleAnalysis(request, response) {
       guardrails: loadedConfig.config.guardrails,
     },
     job,
+    githubContext,
     ruleAnalysis,
     modelRoutePlan,
     ragContext,
   })
+}
+
+async function loadGitHubContextForPayload(payload, reviewConfig) {
+  try {
+    return await fetchGitHubPullRequestContext({ payload, reviewConfig, token: githubToken })
+  } catch (error) {
+    return {
+      source: 'github-api-unavailable',
+      error: error instanceof Error ? error.message : String(error),
+      changedFiles: payload.files ?? [],
+      fullFiles: [],
+      dependencyFiles: [],
+      issues: [],
+      jira: {
+        enabled: Boolean(process.env.JIRA_BASE_URL && process.env.JIRA_API_TOKEN),
+        items: [],
+        reason: 'Jira context is not connected in this local context step.',
+      },
+      historicalSnippets: [],
+    }
+  }
+}
+
+function buildAnalysisFiles(payload, githubContext) {
+  const contextFiles = buildContextFilesForAnalysis(githubContext)
+
+  if (contextFiles.length) {
+    return contextFiles
+  }
+
+  return payload.files ?? []
 }
 
 async function handleFeedback(request, response) {
@@ -193,6 +231,7 @@ export function createGitHubAppServer() {
           ok: true,
           service: 'codesentinel-github-app',
           webhookSecretConfigured: Boolean(webhookSecret),
+          githubTokenConfigured: Boolean(githubToken),
           configPath,
           feedbackStorePath,
         })
@@ -246,16 +285,25 @@ async function runCheck() {
   const signatureResult = verifyGitHubSignature({ secret, body, signature: validSignature })
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const job = createPullRequestJob(createExamplePullRequestPayload(), 'pull_request', { reviewConfig: loadedConfig.config })
+  const githubContext = {
+    source: 'self-check',
+    changedFiles: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
+    fullFiles: [],
+    dependencyFiles: [],
+    issues: [],
+    historicalSnippets: [{ path: 'server/github/reviewPipeline.js', content: 'validate tenant auth before merge' }],
+  }
+  const analysisFiles = buildAnalysisFiles(createExamplePullRequestPayload(), githubContext)
   const ruleAnalysis = runRuleEngine({
     job,
     reviewConfig: loadedConfig.config,
-    files: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
+    files: analysisFiles,
   })
   const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
   const ragContext = retrieveReviewContext({
     query: 'tenant auth merge server',
     reviewConfig: loadedConfig.config,
-    files: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
+    files: analysisFiles,
   })
   const feedbackCheckPath = path.join(os.tmpdir(), `codesentinel-feedback-check-${Date.now()}.jsonl`)
   const feedbackEvent = await saveFeedbackEvent(
@@ -277,6 +325,7 @@ async function runCheck() {
     job.status !== 'queued' ||
     job.pipeline.length !== 3 ||
     !job.reviewConfig ||
+    !analysisFiles.length ||
     !ruleAnalysis.findings.length ||
     modelRoutePlan.routes.length !== 4 ||
     !ragContext.hits.length ||
