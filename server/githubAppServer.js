@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
+import { buildModelRoutePlan } from './models/modelRouter.js'
 import { runRuleEngine } from './rules/ruleEngine.js'
 
 const port = Number(process.env.PORT ?? 8787)
@@ -60,6 +61,7 @@ async function handleGitHubWebhook(request, response) {
     reviewConfig: loadedConfig.config,
     files: payload.files ?? [],
   })
+  const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
@@ -71,6 +73,7 @@ async function handleGitHubWebhook(request, response) {
     },
     job,
     ruleAnalysis,
+    modelRoutePlan,
   })
 }
 
@@ -91,6 +94,7 @@ async function handleRuleAnalysis(request, response) {
   const files = Array.isArray(input.files) ? input.files : payload.files ?? []
   const job = input.job ?? createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
   const ruleAnalysis = runRuleEngine({ job, reviewConfig: loadedConfig.config, files })
+  const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
 
   jsonResponse(response, 200, {
     ok: true,
@@ -101,6 +105,7 @@ async function handleRuleAnalysis(request, response) {
     },
     job,
     ruleAnalysis,
+    modelRoutePlan,
   })
 }
 
@@ -109,6 +114,7 @@ async function handleExample(response) {
   const body = Buffer.from(JSON.stringify(payload))
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const acceptedJob = createPullRequestJob(payload, 'pull_request', { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = runRuleEngine({ job: acceptedJob, reviewConfig: loadedConfig.config })
 
   jsonResponse(response, 200, {
     headers: {
@@ -117,7 +123,8 @@ async function handleExample(response) {
     },
     payload,
     acceptedJob,
-    ruleAnalysis: runRuleEngine({ job: acceptedJob, reviewConfig: loadedConfig.config }),
+    ruleAnalysis,
+    modelRoutePlan: buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis }),
   })
 }
 
@@ -178,12 +185,20 @@ async function runCheck() {
     reviewConfig: loadedConfig.config,
     files: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
   })
+  const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
 
-  if (!signatureResult.ok || job.status !== 'queued' || job.pipeline.length !== 3 || !job.reviewConfig || !ruleAnalysis.findings.length) {
+  if (
+    !signatureResult.ok ||
+    job.status !== 'queued' ||
+    job.pipeline.length !== 3 ||
+    !job.reviewConfig ||
+    !ruleAnalysis.findings.length ||
+    modelRoutePlan.routes.length !== 4
+  ) {
     throw new Error('GitHub App server self-check failed')
   }
 
-  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config', 'rule_engine'] }, null, 2))
+  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config', 'rule_engine', 'model_router'] }, null, 2))
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])

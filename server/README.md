@@ -8,6 +8,7 @@ This directory contains the engineering-realization backend for CodeSentinel. Th
 npm run server:check
 npm run server:config-check
 npm run server:rules-check
+npm run server:model-check
 npm run server:dev
 ```
 
@@ -49,6 +50,7 @@ Implemented:
 - Three-lane analysis plan: guardrail, intent, architecture.
 - Real `.ai-reviewer.yml` loading, YAML parsing, normalization, and job snapshotting.
 - Rule engine service module for P0/P1 findings, merge gate state, health score, and low-risk checklist.
+- Model route planning for summary, intent, risk, and architecture tasks with latency budget and fallback strategy.
 
 Next:
 
