@@ -9,6 +9,7 @@ npm run server:check
 npm run server:config-check
 npm run server:rules-check
 npm run server:model-check
+npm run server:rag-check
 npm run server:dev
 ```
 
@@ -51,10 +52,11 @@ Implemented:
 - Real `.ai-reviewer.yml` loading, YAML parsing, normalization, and job snapshotting.
 - Rule engine service module for P0/P1 findings, merge gate state, health score, and low-risk checklist.
 - Model route planning for summary, intent, risk, and architecture tasks with latency budget and fallback strategy.
+- Local RAG-style context retriever for implicit standards and changed-file patches.
 
 Next:
 
-- Wire `POST /analysis/rules` as a standalone API endpoint.
+- Replace the local RAG scorer with a durable vector database.
 - Create GitHub Check Runs.
 - Publish PR summary comments and inline review comments.
 - Persist review feedback and analysis results.
