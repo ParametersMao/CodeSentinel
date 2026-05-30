@@ -221,6 +221,37 @@ const platformIntegrations = [
   },
 ]
 
+const modelRoutes = [
+  {
+    task: 'PR 摘要',
+    model: 'GPT-4o-mini / Claude Haiku',
+    latency: '3-6 秒',
+    cost: '低',
+    reason: '摘要任务强调速度和成本，先给评审人快速建立上下文。',
+  },
+  {
+    task: 'Issue 意图对齐',
+    model: 'GPT-4o-mini',
+    latency: '5-8 秒',
+    cost: '低',
+    reason: '主要做文本对齐和差异归纳，使用快速模型即可覆盖大部分场景。',
+  },
+  {
+    task: '架构 RAG 审查',
+    model: 'Claude Sonnet / GPT-4o',
+    latency: '12-20 秒',
+    cost: '中',
+    reason: '需要理解历史代码模式、边界和设计约束，优先选择强推理模型。',
+  },
+  {
+    task: '安全漏洞推演',
+    model: 'GPT-4o / Claude Sonnet',
+    latency: '15-30 秒',
+    cost: '高',
+    reason: '仅在 P0/P1 候选风险上触发，保证准确性，同时控制总体成本。',
+  },
+]
+
 const calibrationActions = [
   ['误报聚类', '把“太打扰”的建议按规则、文件路径和模型来源聚类，下次降低同类 P2 的主动曝光。'],
   ['阈值调整', '当某类建议连续被忽略或点踩时，提高置信度阈值，只保留证据更强的评论。'],
@@ -1102,6 +1133,23 @@ function App() {
                     <b>{item.name}</b>
                     <em>{item.trigger}</em>
                     <p>{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="model-routing-panel">
+              <div className="section-heading">
+                <span>模型路由大脑</span>
+                <strong>速度 / 成本 / 准确性</strong>
+              </div>
+              <div className="route-table">
+                {modelRoutes.map((route) => (
+                  <div className="route-row" key={route.task}>
+                    <b>{route.task}</b>
+                    <span>{route.model}</span>
+                    <em>{route.latency} · {route.cost}成本</em>
+                    <p>{route.reason}</p>
                   </div>
                 ))}
               </div>
