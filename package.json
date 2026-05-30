@@ -9,11 +9,13 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server:dev": "node server/githubAppServer.js",
-    "server:check": "node server/githubAppServer.js --check"
+    "server:check": "node server/githubAppServer.js --check",
+    "server:config-check": "node server/config/aiReviewerConfig.js --check"
   },
   "dependencies": {
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

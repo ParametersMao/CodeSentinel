@@ -1,9 +1,12 @@
 import http from 'node:http'
+import path from 'node:path'
+import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
+const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 
 function jsonResponse(response, statusCode, body) {
   const payload = JSON.stringify(body, null, 2)
@@ -48,18 +51,25 @@ async function handleGitHubWebhook(request, response) {
     return
   }
 
-  const job = createPullRequestJob(payload, eventName)
+  const loadedConfig = await loadAiReviewerConfig(configPath)
+  const job = createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
     signature: signatureResult,
+    config: {
+      path: loadedConfig.path,
+      project: loadedConfig.config.project,
+      review: loadedConfig.config.review,
+    },
     job,
   })
 }
 
-function handleExample(response) {
+async function handleExample(response) {
   const payload = createExamplePullRequestPayload()
   const body = Buffer.from(JSON.stringify(payload))
+  const loadedConfig = await loadAiReviewerConfig(configPath)
 
   jsonResponse(response, 200, {
     headers: {
@@ -67,7 +77,7 @@ function handleExample(response) {
       'x-hub-signature-256': webhookSecret ? createGitHubSignature(webhookSecret, body) : 'set GITHUB_WEBHOOK_SECRET to generate a real signature',
     },
     payload,
-    acceptedJob: createPullRequestJob(payload, 'pull_request'),
+    acceptedJob: createPullRequestJob(payload, 'pull_request', { reviewConfig: loadedConfig.config }),
   })
 }
 
@@ -81,12 +91,13 @@ export function createGitHubAppServer() {
           ok: true,
           service: 'codesentinel-github-app',
           webhookSecretConfigured: Boolean(webhookSecret),
+          configPath,
         })
         return
       }
 
       if (request.method === 'GET' && url.pathname === '/webhooks/github/example') {
-        handleExample(response)
+        await handleExample(response)
         return
       }
 
@@ -110,22 +121,26 @@ export function createGitHubAppServer() {
   })
 }
 
-function runCheck() {
+async function runCheck() {
   const secret = 'local-check-secret'
   const body = Buffer.from(JSON.stringify(createExamplePullRequestPayload()))
   const validSignature = createGitHubSignature(secret, body)
   const signatureResult = verifyGitHubSignature({ secret, body, signature: validSignature })
-  const job = createPullRequestJob(createExamplePullRequestPayload(), 'pull_request')
+  const loadedConfig = await loadAiReviewerConfig(configPath)
+  const job = createPullRequestJob(createExamplePullRequestPayload(), 'pull_request', { reviewConfig: loadedConfig.config })
 
-  if (!signatureResult.ok || job.status !== 'queued' || job.pipeline.length !== 3) {
+  if (!signatureResult.ok || job.status !== 'queued' || job.pipeline.length !== 3 || !job.reviewConfig) {
     throw new Error('GitHub App server self-check failed')
   }
 
-  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline'] }, null, 2))
+  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config'] }, null, 2))
 }
 
 if (process.argv.includes('--check')) {
-  runCheck()
+  runCheck().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
 } else {
   createGitHubAppServer().listen(port, () => {
     console.log(`CodeSentinel GitHub App server listening on http://127.0.0.1:${port}`)

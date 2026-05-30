@@ -6,6 +6,7 @@ This directory contains the engineering-realization backend for CodeSentinel. Th
 
 ```bash
 npm run server:check
+npm run server:config-check
 npm run server:dev
 ```
 
@@ -30,6 +31,7 @@ GITHUB_APP_ID=
 GITHUB_PRIVATE_KEY=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 ```
 
 `GITHUB_WEBHOOK_SECRET` is optional for local development. When configured, the server verifies `x-hub-signature-256` using HMAC SHA-256 before accepting a payload.
@@ -43,10 +45,10 @@ Implemented:
 - Pull request event filtering.
 - Structured review job creation.
 - Three-lane analysis plan: guardrail, intent, architecture.
+- Real `.ai-reviewer.yml` loading, YAML parsing, normalization, and job snapshotting.
 
 Next:
 
-- Read `.ai-reviewer.yml` from the target repository.
 - Create GitHub Check Runs.
 - Publish PR summary comments and inline review comments.
 - Persist review feedback and analysis results.

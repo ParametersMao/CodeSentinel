@@ -1,0 +1,66 @@
+version: 1
+
+project:
+  name: CodeSentinel
+  type: frontend-product
+  language: javascript
+
+review:
+  minimumSeverity: P1
+  confidenceThreshold: 0.8
+  targetLatencySeconds: 30
+  activeLanes:
+    - guardrail
+    - intent
+    - architecture
+
+guardrails:
+  blockerRules:
+    - auth-bypass
+    - tenant-isolation
+    - secret-leak
+    - unsafe-sql
+    - ai-agent-loop
+  criticalPaths:
+    - src/
+    - server/
+    - prompts/
+    - package.json
+  requireTestsFor:
+    - authentication
+    - authorization
+    - data-access
+    - model-routing
+
+context:
+  includeFullFiles: true
+  includeDependencyFiles: true
+  dependencyFiles:
+    - package.json
+    - package-lock.json
+  rag:
+    enabled: true
+    recallTopK: 6
+    sources:
+      - implicit-code-standard
+      - historical-good-slices
+      - requirement-docs
+
+models:
+  summary:
+    provider: local
+    model: fast-summary
+    maxLatencyMs: 3000
+  risk:
+    provider: local
+    model: strong-reasoning
+    maxLatencyMs: 12000
+  architecture:
+    provider: local
+    model: architecture-reviewer
+    maxLatencyMs: 18000
+
+feedback:
+  persistence: file
+  allowThumbs: true
+  learnFromIgnoredP2: true

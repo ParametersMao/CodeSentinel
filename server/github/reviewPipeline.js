@@ -25,12 +25,13 @@ export function shouldAnalyzePullRequest(eventName, action) {
   return eventName === 'pull_request' && pullRequestActions.has(action)
 }
 
-export function createPullRequestJob(payload, eventName = 'pull_request') {
+export function createPullRequestJob(payload, eventName = 'pull_request', options = {}) {
   const pullRequest = payload.pull_request ?? {}
   const repository = payload.repository ?? {}
   const installation = payload.installation ?? {}
   const action = payload.action ?? 'unknown'
   const shouldAnalyze = shouldAnalyzePullRequest(eventName, action)
+  const reviewConfig = options.reviewConfig ?? null
 
   return {
     id: [
@@ -63,6 +64,19 @@ export function createPullRequestJob(payload, eventName = 'pull_request') {
       additions: pullRequest.additions ?? null,
       deletions: pullRequest.deletions ?? null,
     },
+    reviewConfig: reviewConfig
+      ? {
+          version: reviewConfig.version,
+          minimumSeverity: reviewConfig.review.minimumSeverity,
+          confidenceThreshold: reviewConfig.review.confidenceThreshold,
+          activeLanes: reviewConfig.review.activeLanes,
+          blockerRules: reviewConfig.guardrails.blockerRules,
+          criticalPaths: reviewConfig.guardrails.criticalPaths,
+          ragEnabled: reviewConfig.context.rag.enabled,
+          modelRoutes: reviewConfig.models,
+          feedbackPersistence: reviewConfig.feedback.persistence,
+        }
+      : null,
     pipeline: analysisSteps,
     publishPlan: {
       checkRun: shouldAnalyze,
