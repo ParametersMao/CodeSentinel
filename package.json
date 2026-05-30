@@ -13,7 +13,8 @@
     "server:config-check": "node server/config/aiReviewerConfig.js --check",
     "server:rules-check": "node server/rules/ruleEngine.js --check",
     "server:model-check": "node server/models/modelRouter.js --check",
-    "server:rag-check": "node server/rag/contextRetriever.js --check"
+    "server:rag-check": "node server/rag/contextRetriever.js --check",
+    "server:feedback-check": "node server/feedback/feedbackStore.js --check"
   },
   "dependencies": {
     "react": "^19.2.6",

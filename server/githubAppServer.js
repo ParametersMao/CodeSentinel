@@ -1,7 +1,10 @@
 import http from 'node:http'
+import { rm } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
+import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
@@ -11,6 +14,7 @@ import { runRuleEngine } from './rules/ruleEngine.js'
 const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
+const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
 
 function jsonResponse(response, statusCode, body) {
   const payload = JSON.stringify(body, null, 2)
@@ -122,6 +126,39 @@ async function handleRuleAnalysis(request, response) {
   })
 }
 
+async function handleFeedback(request, response) {
+  const body = await readRequestBody(request)
+  let input
+
+  try {
+    input = JSON.parse(body.toString('utf8') || '{}')
+  } catch {
+    jsonResponse(response, 400, { ok: false, error: 'Invalid JSON payload' })
+    return
+  }
+
+  try {
+    const event = await saveFeedbackEvent(input, feedbackStorePath)
+    jsonResponse(response, 201, { ok: true, event })
+  } catch (error) {
+    jsonResponse(response, 400, {
+      ok: false,
+      error: 'Invalid feedback event',
+      detail: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+async function handleFeedbackSummary(response) {
+  const events = await readFeedbackEvents(feedbackStorePath)
+
+  jsonResponse(response, 200, {
+    ok: true,
+    storePath: feedbackStorePath,
+    summary: summarizeFeedback(events),
+  })
+}
+
 async function handleExample(response) {
   const payload = createExamplePullRequestPayload()
   const body = Buffer.from(JSON.stringify(payload))
@@ -157,6 +194,7 @@ export function createGitHubAppServer() {
           service: 'codesentinel-github-app',
           webhookSecretConfigured: Boolean(webhookSecret),
           configPath,
+          feedbackStorePath,
         })
         return
       }
@@ -176,10 +214,20 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'POST' && url.pathname === '/feedback') {
+        await handleFeedback(request, response)
+        return
+      }
+
+      if (request.method === 'GET' && url.pathname === '/feedback/summary') {
+        await handleFeedbackSummary(response)
+        return
+      }
+
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules'],
+        routes: ['GET /health', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /feedback', 'GET /feedback/summary'],
       })
     } catch (error) {
       jsonResponse(response, 500, {
@@ -209,6 +257,20 @@ async function runCheck() {
     reviewConfig: loadedConfig.config,
     files: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
   })
+  const feedbackCheckPath = path.join(os.tmpdir(), `codesentinel-feedback-check-${Date.now()}.jsonl`)
+  const feedbackEvent = await saveFeedbackEvent(
+    {
+      action: 'helpful',
+      repository: job.repository.fullName,
+      pullRequest: job.pullRequest.number,
+      findingId: ruleAnalysis.findings[0]?.id,
+      severity: ruleAnalysis.findings[0]?.severity,
+      rule: ruleAnalysis.findings[0]?.rule,
+      actor: 'self-check',
+    },
+    feedbackCheckPath,
+  )
+  await rm(feedbackCheckPath, { force: true })
 
   if (
     !signatureResult.ok ||
@@ -217,12 +279,13 @@ async function runCheck() {
     !job.reviewConfig ||
     !ruleAnalysis.findings.length ||
     modelRoutePlan.routes.length !== 4 ||
-    !ragContext.hits.length
+    !ragContext.hits.length ||
+    !feedbackEvent.id
   ) {
     throw new Error('GitHub App server self-check failed')
   }
 
-  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config', 'rule_engine', 'model_router', 'rag_context'] }, null, 2))
+  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config', 'rule_engine', 'model_router', 'rag_context', 'feedback_store'] }, null, 2))
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
