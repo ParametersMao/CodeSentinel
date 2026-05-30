@@ -194,6 +194,33 @@ const architectureModules = [
   ['模型路由大脑 Multi-Agent Router', '简单总结和意图对比走 GPT-4o-mini / Claude Haiku，深度架构与安全推演走 GPT-4o / Claude Sonnet。'],
 ]
 
+const platformIntegrations = [
+  {
+    name: 'GitHub Webhook',
+    trigger: 'pull_request.opened / synchronize / reopened',
+    status: '已规划',
+    detail: '接收 PR 事件后异步拉取 Diff、Issue、文件列表和 CI 状态。',
+  },
+  {
+    name: 'GitHub Check Run',
+    trigger: 'CodeSentinel Review',
+    status: 'Running / Failed',
+    detail: '分析中显示 Running；出现 P0 Blocker 时写入 Failed 并拦截合并。',
+  },
+  {
+    name: 'PR 首页回复',
+    trigger: 'analysis.completed',
+    status: '自动发布',
+    detail: '发布《变更验收报告》，包含健康度、Blocker、Checklist 和测试建议。',
+  },
+  {
+    name: 'GitLab Merge Request',
+    trigger: 'merge_request_events',
+    status: '兼容设计',
+    detail: '抽象 Webhook、Diff、Note、Pipeline 状态，后续复用同一审查内核。',
+  },
+]
+
 const defaultReviewConfig = {
   projectType: 'monorepo',
   criticalPaths: 'core, api, service, domain',
@@ -481,6 +508,24 @@ function contextSources(review) {
   ]
 }
 
+function buildPrCommentPreview(review, blockerCount) {
+  return [
+    `## ${review.reportTitle}`,
+    '',
+    `健康度评分：${review.healthScore}`,
+    `合并状态：${blockerCount > 0 ? '阻断合并，需处理 P0 Blocker' : '可进入人工确认'}`,
+    '',
+    '### 核心风险',
+    ...review.findings
+      .filter((finding) => severityRank[finding.severity] >= severityRank.P1)
+      .slice(0, 3)
+      .map((finding) => `- [${finding.severity}] ${finding.title} (${finding.file}:${finding.line})`),
+    '',
+    '### Checklist',
+    ...review.checklist.slice(0, 3).map((item) => `- [ ] ${item}`),
+  ].join('\n')
+}
+
 function App() {
   const [prUrl, setPrUrl] = useState(samplePrUrl)
   const [review, setReview] = useState(sampleReview)
@@ -517,6 +562,7 @@ function App() {
   const selectedMode = onboardingModes[projectMode]
   const configPreview = buildConfigPreview(reviewConfig)
   const blockerRules = listToYamlArray(reviewConfig.blockers)
+  const prCommentPreview = buildPrCommentPreview(review, blockerCount)
 
   function updateReviewConfig(field, value) {
     setReviewConfig((current) => ({ ...current, [field]: value }))
@@ -840,6 +886,14 @@ function App() {
               </article>
             </section>
 
+            <section className="pr-comment-panel" aria-label="PR 自动回复预览">
+              <div className="section-heading">
+                <span>PR 首页自动回复</span>
+                <strong>{blockerCount > 0 ? '将写入失败检查' : '将写入通过检查'}</strong>
+              </div>
+              <pre>{prCommentPreview}</pre>
+            </section>
+
             <section className="review-grid">
               <article className="findings-panel">
                 <div className="section-heading">
@@ -937,34 +991,53 @@ function App() {
         )}
 
         {activeView === '系统设计' && (
-          <section className="secondary-view">
-            <article className="context-panel">
+          <section className="system-view">
+            <section className="secondary-view">
+              <article className="context-panel">
+                <div className="section-heading">
+                  <span>上下文管线</span>
+                  <strong>5 类来源</strong>
+                </div>
+                <div className="source-list">
+                  {contextSources(review).map(([name, detail, status]) => (
+                    <div className="source-row" key={name}>
+                      <span>{name}</span>
+                      <b>{detail}</b>
+                      <em className={status}>{statusLabel(status)}</em>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="decision-panel architecture-panel">
+                <div className="section-heading">
+                  <span>系统架构拆解</span>
+                  <strong>V1.0 商业化基线</strong>
+                </div>
+                {architectureModules.map(([title, detail]) => (
+                  <div className="decision-row" key={title}>
+                    <b>{title}</b>
+                    <p>{detail}</p>
+                  </div>
+                ))}
+              </article>
+            </section>
+
+            <article className="platform-panel">
               <div className="section-heading">
-                <span>上下文管线</span>
-                <strong>5 类来源</strong>
+                <span>平台集成</span>
+                <strong>GitHub / GitLab 生态</strong>
               </div>
-              <div className="source-list">
-                {contextSources(review).map(([name, detail, status]) => (
-                  <div className="source-row" key={name}>
-                    <span>{name}</span>
-                    <b>{detail}</b>
-                    <em className={status}>{statusLabel(status)}</em>
+              <div className="platform-grid">
+                {platformIntegrations.map((item) => (
+                  <div className="platform-card" key={item.name}>
+                    <span>{item.status}</span>
+                    <b>{item.name}</b>
+                    <em>{item.trigger}</em>
+                    <p>{item.detail}</p>
                   </div>
                 ))}
               </div>
-            </article>
-
-            <article className="decision-panel architecture-panel">
-              <div className="section-heading">
-                <span>系统架构拆解</span>
-                <strong>V1.0 商业化基线</strong>
-              </div>
-              {architectureModules.map(([title, detail]) => (
-                <div className="decision-row" key={title}>
-                  <b>{title}</b>
-                  <p>{detail}</p>
-                </div>
-              ))}
             </article>
           </section>
         )}
