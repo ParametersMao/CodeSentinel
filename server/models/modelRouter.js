@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from '../config/aiReviewerConfig.js'
+import { resolveModelRuntime } from './modelRuntime.js'
 
 const taskDefaults = {
   summary: {
@@ -42,13 +43,17 @@ export function buildModelRoutePlan({ reviewConfig, ruleAnalysis }) {
     reason: containsBlocker ? 'P0 Blocker 命中，风险与架构任务升级为强推理路径。' : '未命中 P0，优先控制响应速度和成本。',
     routes: tasks.map((taskName) => {
       const modelConfig = getRouteConfig(reviewConfig, taskName)
+      const runtime = resolveModelRuntime({ ...modelConfig, task: taskName })
       const defaultConfig = taskDefaults[taskName]
       const shouldEscalate = containsBlocker && ['risk', 'architecture'].includes(taskName)
 
       return {
         task: taskName,
-        provider: modelConfig.provider,
-        model: modelConfig.model,
+        provider: runtime.provider,
+        model: runtime.model,
+        baseUrl: runtime.baseUrl,
+        apiKeyEnv: runtime.apiKeyEnv,
+        credentialConfigured: runtime.credentialConfigured,
         maxLatencyMs: modelConfig.maxLatencyMs,
         priority: shouldEscalate ? 'accuracy' : defaultConfig.priority,
         fallback: defaultConfig.fallback,

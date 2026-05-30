@@ -9,6 +9,7 @@ npm run server:check
 npm run server:config-check
 npm run server:rules-check
 npm run server:model-check
+npm run server:model-runtime-check
 npm run server:rag-check
 npm run server:feedback-check
 npm run server:context-check
@@ -43,6 +44,23 @@ GITHUB_CLIENT_SECRET=
 GITHUB_INSTALLATION_ID=
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
+AI_DEFAULT_PROVIDER=openai
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_SUMMARY_MODEL=gpt-4o-mini
+OPENAI_RISK_MODEL=gpt-4o
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_SUMMARY_MODEL=claude-3-5-haiku-latest
+ANTHROPIC_RISK_MODEL=claude-3-5-sonnet-latest
+DEEPSEEK_API_KEY=
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_SUMMARY_MODEL=deepseek-chat
+DEEPSEEK_RISK_MODEL=deepseek-reasoner
+QWEN_API_KEY=
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_SUMMARY_MODEL=qwen-turbo
+QWEN_RISK_MODEL=qwen-plus
 ```
 
 `GITHUB_WEBHOOK_SECRET` is optional for local development. When configured, the server verifies `x-hub-signature-256` using HMAC SHA-256 before accepting a payload.
@@ -62,6 +80,7 @@ Implemented:
 - Local RAG-style context retriever for implicit standards and changed-file patches.
 - JSONL feedback persistence for helpful, unhelpful, accepted, ignored, and missed-risk events.
 - GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
+- Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 
 Next:
 

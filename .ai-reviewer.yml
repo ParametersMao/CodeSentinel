@@ -48,16 +48,16 @@ context:
 
 models:
   summary:
-    provider: local
-    model: fast-summary
+    provider: env
+    model: summary
     maxLatencyMs: 3000
   risk:
-    provider: local
-    model: strong-reasoning
+    provider: env
+    model: risk
     maxLatencyMs: 12000
   architecture:
-    provider: local
-    model: architecture-reviewer
+    provider: env
+    model: architecture
     maxLatencyMs: 18000
 
 feedback:
