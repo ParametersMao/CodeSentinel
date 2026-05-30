@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "server:dev": "node server/githubAppServer.js",
     "server:check": "node server/githubAppServer.js --check",
-    "server:config-check": "node server/config/aiReviewerConfig.js --check"
+    "server:config-check": "node server/config/aiReviewerConfig.js --check",
+    "server:rules-check": "node server/rules/ruleEngine.js --check"
   },
   "dependencies": {
     "react": "^19.2.6",

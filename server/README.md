@@ -7,6 +7,7 @@ This directory contains the engineering-realization backend for CodeSentinel. Th
 ```bash
 npm run server:check
 npm run server:config-check
+npm run server:rules-check
 npm run server:dev
 ```
 
@@ -21,6 +22,7 @@ http://127.0.0.1:8787
 - `GET /health`: health check for deployment and local debugging.
 - `GET /webhooks/github/example`: sample GitHub webhook payload and the review job it creates.
 - `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events.
+- `POST /analysis/rules`: planned API surface for direct rule analysis calls.
 
 ## Environment Variables
 
@@ -46,9 +48,11 @@ Implemented:
 - Structured review job creation.
 - Three-lane analysis plan: guardrail, intent, architecture.
 - Real `.ai-reviewer.yml` loading, YAML parsing, normalization, and job snapshotting.
+- Rule engine service module for P0/P1 findings, merge gate state, health score, and low-risk checklist.
 
 Next:
 
+- Wire `POST /analysis/rules` as a standalone API endpoint.
 - Create GitHub Check Runs.
 - Publish PR summary comments and inline review comments.
 - Persist review feedback and analysis results.

@@ -1,8 +1,10 @@
 import http from 'node:http'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
+import { runRuleEngine } from './rules/ruleEngine.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
@@ -53,6 +55,11 @@ async function handleGitHubWebhook(request, response) {
 
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const job = createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = runRuleEngine({
+    job,
+    reviewConfig: loadedConfig.config,
+    files: payload.files ?? [],
+  })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
@@ -63,6 +70,37 @@ async function handleGitHubWebhook(request, response) {
       review: loadedConfig.config.review,
     },
     job,
+    ruleAnalysis,
+  })
+}
+
+async function handleRuleAnalysis(request, response) {
+  const body = await readRequestBody(request)
+  const loadedConfig = await loadAiReviewerConfig(configPath)
+  let input
+
+  try {
+    input = JSON.parse(body.toString('utf8') || '{}')
+  } catch {
+    jsonResponse(response, 400, { ok: false, error: 'Invalid JSON payload' })
+    return
+  }
+
+  const payload = input.payload ?? createExamplePullRequestPayload()
+  const eventName = input.eventName ?? 'pull_request'
+  const files = Array.isArray(input.files) ? input.files : payload.files ?? []
+  const job = input.job ?? createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = runRuleEngine({ job, reviewConfig: loadedConfig.config, files })
+
+  jsonResponse(response, 200, {
+    ok: true,
+    config: {
+      path: loadedConfig.path,
+      review: loadedConfig.config.review,
+      guardrails: loadedConfig.config.guardrails,
+    },
+    job,
+    ruleAnalysis,
   })
 }
 
@@ -70,6 +108,7 @@ async function handleExample(response) {
   const payload = createExamplePullRequestPayload()
   const body = Buffer.from(JSON.stringify(payload))
   const loadedConfig = await loadAiReviewerConfig(configPath)
+  const acceptedJob = createPullRequestJob(payload, 'pull_request', { reviewConfig: loadedConfig.config })
 
   jsonResponse(response, 200, {
     headers: {
@@ -77,7 +116,8 @@ async function handleExample(response) {
       'x-hub-signature-256': webhookSecret ? createGitHubSignature(webhookSecret, body) : 'set GITHUB_WEBHOOK_SECRET to generate a real signature',
     },
     payload,
-    acceptedJob: createPullRequestJob(payload, 'pull_request', { reviewConfig: loadedConfig.config }),
+    acceptedJob,
+    ruleAnalysis: runRuleEngine({ job: acceptedJob, reviewConfig: loadedConfig.config }),
   })
 }
 
@@ -106,10 +146,15 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'POST' && url.pathname === '/analysis/rules') {
+        await handleRuleAnalysis(request, response)
+        return
+      }
+
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /webhooks/github/example', 'POST /webhooks/github'],
+        routes: ['GET /health', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules'],
       })
     } catch (error) {
       jsonResponse(response, 500, {
@@ -128,20 +173,27 @@ async function runCheck() {
   const signatureResult = verifyGitHubSignature({ secret, body, signature: validSignature })
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const job = createPullRequestJob(createExamplePullRequestPayload(), 'pull_request', { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = runRuleEngine({
+    job,
+    reviewConfig: loadedConfig.config,
+    files: [{ filename: 'server/github/reviewPipeline.js', patch: '+ validate tenant auth before merge' }],
+  })
 
-  if (!signatureResult.ok || job.status !== 'queued' || job.pipeline.length !== 3 || !job.reviewConfig) {
+  if (!signatureResult.ok || job.status !== 'queued' || job.pipeline.length !== 3 || !job.reviewConfig || !ruleAnalysis.findings.length) {
     throw new Error('GitHub App server self-check failed')
   }
 
-  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config'] }, null, 2))
+  console.log(JSON.stringify({ ok: true, checked: ['signature', 'pull_request_job', 'pipeline', 'ai_reviewer_config', 'rule_engine'] }, null, 2))
 }
 
-if (process.argv.includes('--check')) {
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+
+if (isDirectRun && process.argv.includes('--check')) {
   runCheck().catch((error) => {
     console.error(error)
     process.exitCode = 1
   })
-} else {
+} else if (isDirectRun) {
   createGitHubAppServer().listen(port, () => {
     console.log(`CodeSentinel GitHub App server listening on http://127.0.0.1:${port}`)
   })
