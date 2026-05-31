@@ -110,15 +110,15 @@ This command calls the configured model and consumes provider tokens. If the mod
 
 ## GitHub Publish
 
-`POST /publish/github` writes two artifacts:
+`POST /publish/github` writes GitHub review artifacts:
 
 - GitHub Check Run: `CodeSentinel AI Review`
 - PR homepage comment: `CodeSentinel 变更验收报告`
+- Diff inline comments for up to five P0/P1 risks with valid changed-file locations.
 
-It requires a token with Checks and Pull Requests / Issues write permissions. The backend now prefers GitHub App Installation Token when `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, and `GITHUB_INSTALLATION_ID` are configured, and falls back to `GITHUB_TOKEN`.
+It requires a token with Checks and Pull Requests / Issues write permissions. The backend now prefers GitHub App Installation Token when `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, and `GITHUB_INSTALLATION_ID` are configured, and falls back to `GITHUB_TOKEN`. Inline comment failures are returned as skipped items so a single invalid diff line does not block the full report.
 
 Next:
 
 - Replace the local RAG scorer with a durable vector database.
-- Publish inline review comments.
 - Persist review feedback and analysis results.

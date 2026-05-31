@@ -85,6 +85,44 @@ function getEffectiveMergeGate(aiReview, ruleAnalysis) {
   }
 }
 
+function normalizeRiskLocation(risk) {
+  const path = risk.file ?? risk.path ?? risk.filename
+  const line = Number(risk.line ?? risk.startLine ?? risk.endLine)
+
+  if (!path || !Number.isInteger(line) || line <= 0) {
+    return null
+  }
+
+  return { path, line }
+}
+
+function getInlineReviewRisks(aiReview, ruleAnalysis) {
+  return getEffectiveRisks(aiReview, ruleAnalysis)
+    .filter((risk) => ['P0', 'P1'].includes(risk.severity))
+    .map((risk) => {
+      const matchedRuleFinding = ruleAnalysis.findings.find(
+        (finding) => finding.title === risk.title && finding.severity === risk.severity && normalizeRiskLocation(finding),
+      ) ?? ruleAnalysis.findings.find((finding) => finding.severity === risk.severity && normalizeRiskLocation(finding))
+
+      return { risk, location: normalizeRiskLocation(risk) ?? normalizeRiskLocation(matchedRuleFinding) }
+    })
+    .filter((item) => item.location)
+    .slice(0, 5)
+}
+
+function formatInlineReviewBody(risk) {
+  return [
+    `**${risk.severity} ${risk.title}**`,
+    '',
+    risk.evidence ? `证据：${risk.evidence}` : '',
+    risk.suggestion ? `建议：${risk.suggestion}` : '',
+    '',
+    '<sub>CodeSentinel 行级 AI Review</sub>',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 export function formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ragContext }) {
   const review = aiReview.review
   const route = aiReview.route
@@ -188,13 +226,57 @@ export async function createPullRequestComment({ job, aiReview, ruleAnalysis, mo
   )
 }
 
+export async function createPullRequestInlineComments({ job, aiReview, ruleAnalysis, token, fetchImpl }) {
+  const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
+  const inlineRisks = getInlineReviewRisks(aiReview, ruleAnalysis)
+  const results = await Promise.allSettled(
+    inlineRisks.map(({ risk, location }) =>
+      postGitHubJson(
+        `${githubApiBaseUrl}/repos/${owner}/${repo}/pulls/${job.pullRequest.number}/comments`,
+        {
+          body: formatInlineReviewBody(risk),
+          commit_id: job.pullRequest.headSha,
+          path: location.path,
+          line: location.line,
+          side: 'RIGHT',
+        },
+        { token, fetchImpl },
+      ),
+    ),
+  )
+
+  return results.map((result, index) => {
+    const { risk, location } = inlineRisks[index]
+
+    if (result.status === 'fulfilled') {
+      return {
+        status: 'published',
+        id: result.value.id,
+        url: result.value.html_url ?? result.value.url,
+        severity: risk.severity,
+        path: location.path,
+        line: location.line,
+      }
+    }
+
+    return {
+      status: 'skipped',
+      reason: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      severity: risk.severity,
+      path: location.path,
+      line: location.line,
+    }
+  })
+}
+
 export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }) {
   const tokenResult = token
     ? { source: 'provided-token', token }
     : await resolveGitHubApiToken({ fetchImpl })
-  const [checkRun, comment] = await Promise.all([
+  const [checkRun, comment, inlineComments] = await Promise.all([
     createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token: tokenResult.token, fetchImpl }),
     createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token: tokenResult.token, fetchImpl }),
+    createPullRequestInlineComments({ job, aiReview, ruleAnalysis, token: tokenResult.token, fetchImpl }),
   ])
 
   return {
@@ -209,6 +291,7 @@ export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRo
       id: comment.id,
       url: comment.html_url ?? comment.url,
     },
+    inlineComments,
   }
 }
 
@@ -220,7 +303,7 @@ export async function publishGitHubReviewWithStatusFlow({ job, runAnalysis, toke
 
   try {
     const analysisResult = await runAnalysis()
-    const [checkRun, comment] = await Promise.all([
+    const [checkRun, comment, inlineComments] = await Promise.all([
       updateCheckRun({
         job,
         checkRunId: runningCheckRun.id,
@@ -236,6 +319,13 @@ export async function publishGitHubReviewWithStatusFlow({ job, runAnalysis, toke
         ruleAnalysis: analysisResult.ruleAnalysis,
         modelRoutePlan: analysisResult.modelRoutePlan,
         ragContext: analysisResult.ragContext,
+        token: tokenResult.token,
+        fetchImpl,
+      }),
+      createPullRequestInlineComments({
+        job,
+        aiReview: analysisResult.aiReview,
+        ruleAnalysis: analysisResult.ruleAnalysis,
         token: tokenResult.token,
         fetchImpl,
       }),
@@ -255,6 +345,7 @@ export async function publishGitHubReviewWithStatusFlow({ job, runAnalysis, toke
           id: comment.id,
           url: comment.html_url ?? comment.url,
         },
+        inlineComments,
       },
     }
   } catch (error) {
@@ -302,7 +393,7 @@ async function runCheck() {
   }
   const ruleAnalysis = {
     mergeGate: { state: 'failure', reason: '发现 1 个 P0 Blocker' },
-    findings: [{ severity: 'P0', title: '权限绕过', evidence: 'auth bypass', suggestion: 'fix auth' }],
+    findings: [{ severity: 'P0', title: '权限绕过', file: 'server/github/reviewPipeline.js', line: 1, evidence: 'auth bypass', suggestion: 'fix auth' }],
     blockers: [{ severity: 'P0' }],
     checklist: ['补充权限测试'],
   }
@@ -322,10 +413,12 @@ async function runCheck() {
 
   if (
     result.publishResult.status !== 'published' ||
-    calls.length !== 3 ||
+    calls.length !== 4 ||
     calls[0].body.status !== 'in_progress' ||
     calls[1].method !== 'PATCH' ||
-    !calls[2].body.body
+    !calls[2].body.body ||
+    calls[3].body.path !== 'server/github/reviewPipeline.js' ||
+    calls[3].body.line !== 1
   ) {
     throw new Error('GitHub publisher self-check failed')
   }

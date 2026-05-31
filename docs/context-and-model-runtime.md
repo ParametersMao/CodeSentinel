@@ -124,5 +124,6 @@ POST /publish/github
 
 1. GitHub Check Run：`CodeSentinel AI Review`。
 2. PR 首页评论：`CodeSentinel 变更验收报告`。
+3. 行级 Diff 评论：默认只发布带有效文件与行号的 P0/P1 风险，最多 5 条；单条行级评论失败时会记录为 skipped，不影响 Check Run 和首页报告。
 
 当前后端会优先使用 GitHub App Installation Token 发布；如果未配置 `GITHUB_APP_ID`、`GITHUB_PRIVATE_KEY`、`GITHUB_INSTALLATION_ID`，才回退到 `GITHUB_TOKEN`。下一步可接入 branch protection required checks。
