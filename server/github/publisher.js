@@ -1,6 +1,5 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
 import { buildFallbackAiReview } from '../review/aiReviewService.js'
 import { resolveGitHubApiToken } from './appAuth.js'
 
@@ -106,14 +105,14 @@ export function buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext }
   }
 }
 
-export async function createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export async function createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token, fetchImpl }) {
   const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
   const payload = buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext })
 
   return postGitHubJson(`${githubApiBaseUrl}/repos/${owner}/${repo}/check-runs`, payload, { token, fetchImpl })
 }
 
-export async function createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export async function createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }) {
   const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
   const body = formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ragContext })
 
@@ -124,7 +123,7 @@ export async function createPullRequestComment({ job, aiReview, ruleAnalysis, mo
   )
 }
 
-export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }) {
   const tokenResult = token
     ? { source: 'provided-token', token }
     : await resolveGitHubApiToken({ fetchImpl })
