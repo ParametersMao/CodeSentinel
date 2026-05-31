@@ -1,11 +1,61 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const samplePrUrl = 'https://github.com/acme/codesentinel/pull/421'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8787'
 
 const severityRank = { P0: 3, P1: 2, P2: 1 }
 
-const views = ['接入配置', '评审工作台', '系统设计', '团队洞察']
+const views = ['接入配置', '系统配置', '评审工作台', '系统设计', '团队洞察']
+
+const runtimeConfigGroups = [
+  {
+    title: 'GitHub 接入',
+    description: '用于 Webhook 校验、公开仓库上下文拉取和后续 GitHub App 私有仓库鉴权。',
+    fields: [
+      ['GITHUB_WEBHOOK_SECRET', 'Webhook Secret', true],
+      ['GITHUB_TOKEN', 'GitHub Token', true],
+      ['GITHUB_APP_ID', 'GitHub App ID', false],
+      ['GITHUB_PRIVATE_KEY', 'GitHub Private Key', true],
+      ['GITHUB_INSTALLATION_ID', 'Installation ID', false],
+    ],
+  },
+  {
+    title: '模型 Provider',
+    description: '选择默认大模型供应商，并填写对应 API Key。未使用的 Provider 可以留空。',
+    fields: [
+      ['AI_DEFAULT_PROVIDER', '默认 Provider', false],
+      ['OPENAI_API_KEY', 'OpenAI API Key', true],
+      ['OPENAI_BASE_URL', 'OpenAI Base URL', false],
+      ['OPENAI_SUMMARY_MODEL', 'OpenAI 摘要模型', false],
+      ['OPENAI_RISK_MODEL', 'OpenAI 风险模型', false],
+      ['DEEPSEEK_API_KEY', 'DeepSeek API Key', true],
+      ['DEEPSEEK_BASE_URL', 'DeepSeek Base URL', false],
+      ['DEEPSEEK_SUMMARY_MODEL', 'DeepSeek 摘要模型', false],
+      ['DEEPSEEK_RISK_MODEL', 'DeepSeek 风险模型', false],
+      ['QWEN_API_KEY', 'Qwen API Key', true],
+      ['QWEN_BASE_URL', 'Qwen Base URL', false],
+      ['QWEN_SUMMARY_MODEL', 'Qwen 摘要模型', false],
+      ['QWEN_RISK_MODEL', 'Qwen 风险模型', false],
+      ['ANTHROPIC_API_KEY', 'Anthropic API Key', true],
+      ['ANTHROPIC_BASE_URL', 'Anthropic Base URL', false],
+      ['ANTHROPIC_SUMMARY_MODEL', 'Anthropic 摘要模型', false],
+      ['ANTHROPIC_RISK_MODEL', 'Anthropic 风险模型', false],
+    ],
+  },
+  {
+    title: '本地运行',
+    description: '控制后端端口、审查配置文件、反馈日志和运行时配置保存位置。',
+    fields: [
+      ['PORT', '后端端口', false],
+      ['AI_REVIEWER_CONFIG_PATH', '审查配置路径', false],
+      ['FEEDBACK_STORE_PATH', '反馈日志路径', false],
+      ['RUNTIME_CONFIG_PATH', '运行时配置路径', false],
+    ],
+  },
+]
+
+const runtimeConfigKeys = runtimeConfigGroups.flatMap((group) => group.fields.map(([key]) => key))
 
 const sampleReview = {
   source: '演示样例',
@@ -596,6 +646,16 @@ function App() {
     file: 'src/api/merge.ts',
     owner: '代码产物',
   })
+  const [runtimeConfig, setRuntimeConfig] = useState(() =>
+    runtimeConfigKeys.reduce((config, key) => ({ ...config, [key]: '' }), {}),
+  )
+  const [runtimeConfigFieldsState, setRuntimeConfigFieldsState] = useState([])
+  const [runtimeConfigStatus, setRuntimeConfigStatus] = useState('尚未连接后端配置服务。')
+  const [isSavingRuntimeConfig, setIsSavingRuntimeConfig] = useState(false)
+
+  useEffect(() => {
+    loadRuntimeConfig()
+  }, [])
 
   const visibleFindings = useMemo(() => {
     return review.findings.filter(
@@ -638,6 +698,68 @@ function App() {
 
   function recordFeedback(findingId, value) {
     setFeedbackByFinding((current) => ({ ...current, [findingId]: value }))
+  }
+
+  async function loadRuntimeConfig() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/runtime-config`)
+      if (!response.ok) throw new Error('配置服务暂不可用')
+
+      const data = await response.json()
+      const values = data.config?.values ?? {}
+      const fields = data.config?.fields ?? []
+
+      setRuntimeConfig((current) =>
+        runtimeConfigKeys.reduce((next, key) => {
+          next[key] = values[key] ?? current[key] ?? ''
+          return next
+        }, {}),
+      )
+      setRuntimeConfigFieldsState(fields)
+      setRuntimeConfigStatus(`已连接配置服务，配置将保存到 ${data.config?.path ?? 'data/runtime-config.json'}。`)
+    } catch (error) {
+      setRuntimeConfigStatus(`${error.message} 请先启动后端：npm run server:dev。`)
+    }
+  }
+
+  async function saveRuntimeConfig() {
+    setIsSavingRuntimeConfig(true)
+
+    try {
+      const fieldMeta = new Map(runtimeConfigFieldsState.map((field) => [field.key, field]))
+      const payload = runtimeConfigKeys.reduce((next, key) => {
+        const value = runtimeConfig[key] ?? ''
+        const isSecret = fieldMeta.get(key)?.secret ?? (key.includes('KEY') || key.includes('TOKEN') || key.includes('SECRET'))
+
+        if (!isSecret || value.trim()) {
+          next[key] = value
+        }
+
+        return next
+      }, {})
+      const response = await fetch(`${apiBaseUrl}/runtime-config`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) throw new Error('保存失败')
+
+      const data = await response.json()
+      setRuntimeConfigFieldsState(data.config?.fields ?? [])
+      setRuntimeConfigStatus('配置已保存。密钥字段已脱敏保存，空白密钥不会覆盖已有值。')
+      setRuntimeConfig((current) =>
+        runtimeConfigKeys.reduce((next, key) => {
+          const meta = data.config?.fields?.find((field) => field.key === key)
+          next[key] = meta?.secret ? '' : data.config?.values?.[key] ?? current[key] ?? ''
+          return next
+        }, {}),
+      )
+    } catch (error) {
+      setRuntimeConfigStatus(`${error.message}，请确认后端服务正在运行。`)
+    } finally {
+      setIsSavingRuntimeConfig(false)
+    }
   }
 
   function addMissedRisk() {
@@ -755,6 +877,59 @@ function App() {
           <b>{review.source}</b>
           <span>{statusMessage}</span>
         </div>
+
+        {activeView === '系统配置' && (
+          <section className="runtime-config-view">
+            <article className="runtime-config-hero">
+              <div>
+                <span className="eyebrow">配置中心</span>
+                <h2>把 GitHub 和大模型配置放到页面里完成</h2>
+                <p>这里保存的是本地运行时配置，密钥不会提交到仓库。生产环境应替换为企业密钥管理或云厂商 Secret Manager。</p>
+              </div>
+              <button className="primary-button" type="button" onClick={saveRuntimeConfig} disabled={isSavingRuntimeConfig}>
+                {isSavingRuntimeConfig ? '保存中...' : '保存配置'}
+              </button>
+            </article>
+
+            <div className="config-status-strip">
+              <b>后端配置服务</b>
+              <span>{runtimeConfigStatus}</span>
+              <button type="button" onClick={loadRuntimeConfig}>刷新状态</button>
+            </div>
+
+            <section className="runtime-config-grid">
+              {runtimeConfigGroups.map((group) => (
+                <article className="runtime-config-card" key={group.title}>
+                  <div className="section-heading">
+                    <span>{group.title}</span>
+                    <strong>{group.fields.length} 项</strong>
+                  </div>
+                  <p>{group.description}</p>
+                  <div className="runtime-field-list">
+                    {group.fields.map(([key, label, secret]) => {
+                      const meta = runtimeConfigFieldsState.find((field) => field.key === key)
+
+                      return (
+                        <label className="runtime-field" key={key}>
+                          <span>
+                            <b>{label}</b>
+                            <em>{meta?.configured ? `已配置 ${meta.maskedValue || ''}` : '未配置'}</em>
+                          </span>
+                          <input
+                            type={secret ? 'password' : 'text'}
+                            value={runtimeConfig[key] ?? ''}
+                            placeholder={secret && meta?.configured ? '留空则保留已有密钥' : key}
+                            onChange={(event) => setRuntimeConfig((current) => ({ ...current, [key]: event.target.value }))}
+                          />
+                        </label>
+                      )
+                    })}
+                  </div>
+                </article>
+              ))}
+            </section>
+          </section>
+        )}
 
         {activeView === '接入配置' && (
           <section className="onboarding-view">

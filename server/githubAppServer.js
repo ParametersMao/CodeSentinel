@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
+import { getRuntimeConfigPath, getRuntimeEnvSync, readRuntimeConfig, saveRuntimeConfig } from './config/runtimeConfigStore.js'
 import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
 import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './github/contextClient.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
@@ -16,15 +17,26 @@ const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
-const githubToken = process.env.GITHUB_TOKEN ?? ''
 
 function jsonResponse(response, statusCode, body) {
   const payload = JSON.stringify(body, null, 2)
   response.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type,x-github-event,x-hub-signature-256',
   })
   response.end(payload)
+}
+
+function emptyResponse(response, statusCode = 204) {
+  response.writeHead(statusCode, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type,x-github-event,x-hub-signature-256',
+  })
+  response.end()
 }
 
 function readRequestBody(request) {
@@ -135,7 +147,7 @@ async function handleRuleAnalysis(request, response) {
 
 async function loadGitHubContextForPayload(payload, reviewConfig) {
   try {
-    return await fetchGitHubPullRequestContext({ payload, reviewConfig, token: githubToken })
+    return await fetchGitHubPullRequestContext({ payload, reviewConfig, token: getRuntimeEnvSync().GITHUB_TOKEN })
   } catch (error) {
     return {
       source: 'github-api-unavailable',
@@ -152,6 +164,29 @@ async function loadGitHubContextForPayload(payload, reviewConfig) {
       historicalSnippets: [],
     }
   }
+}
+
+async function handleRuntimeConfig(response) {
+  jsonResponse(response, 200, {
+    ok: true,
+    config: await readRuntimeConfig(),
+  })
+}
+
+async function handleRuntimeConfigSave(request, response) {
+  const body = await readRequestBody(request)
+  let input
+
+  try {
+    input = JSON.parse(body.toString('utf8') || '{}')
+  } catch {
+    jsonResponse(response, 400, { ok: false, error: 'Invalid JSON payload' })
+    return
+  }
+
+  const config = await saveRuntimeConfig(input)
+
+  jsonResponse(response, 200, { ok: true, config })
 }
 
 function buildAnalysisFiles(payload, githubContext) {
@@ -226,15 +261,32 @@ export function createGitHubAppServer() {
     try {
       const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
 
+      if (request.method === 'OPTIONS') {
+        emptyResponse(response)
+        return
+      }
+
       if (request.method === 'GET' && url.pathname === '/health') {
+        const runtimeEnv = getRuntimeEnvSync()
         jsonResponse(response, 200, {
           ok: true,
           service: 'codesentinel-github-app',
           webhookSecretConfigured: Boolean(webhookSecret),
-          githubTokenConfigured: Boolean(githubToken),
+          githubTokenConfigured: Boolean(runtimeEnv.GITHUB_TOKEN),
           configPath,
           feedbackStorePath,
+          runtimeConfigPath: getRuntimeConfigPath(),
         })
+        return
+      }
+
+      if (request.method === 'GET' && url.pathname === '/runtime-config') {
+        await handleRuntimeConfig(response)
+        return
+      }
+
+      if (request.method === 'POST' && url.pathname === '/runtime-config') {
+        await handleRuntimeConfigSave(request, response)
         return
       }
 
@@ -266,7 +318,7 @@ export function createGitHubAppServer() {
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /feedback', 'GET /feedback/summary'],
+        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /feedback', 'GET /feedback/summary'],
       })
     } catch (error) {
       jsonResponse(response, 500, {

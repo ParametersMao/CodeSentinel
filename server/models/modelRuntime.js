@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
 
 const providerDefaults = {
   openai: {
@@ -73,7 +74,7 @@ function resolveModelName({ routeModel, task, providerConfig, env }) {
   return readEnv(env, providerConfig.riskModelEnv, providerConfig.defaultRiskModel)
 }
 
-export function resolveModelRuntime(route, env = process.env) {
+export function resolveModelRuntime(route, env = getRuntimeEnvSync()) {
   const provider = resolveProviderName(route.provider, env)
   const providerConfig = providerDefaults[provider] ?? providerDefaults.local
   const apiKeyEnv = providerConfig.apiKeyEnv

@@ -12,6 +12,7 @@ npm run server:model-check
 npm run server:model-runtime-check
 npm run server:rag-check
 npm run server:feedback-check
+npm run server:runtime-config-check
 npm run server:context-check
 npm run server:dev
 ```
@@ -25,6 +26,8 @@ http://127.0.0.1:8787
 ## Routes
 
 - `GET /health`: health check for deployment and local debugging.
+- `GET /runtime-config`: read runtime configuration with secret values masked.
+- `POST /runtime-config`: save runtime configuration from the Web UI.
 - `GET /webhooks/github/example`: sample GitHub webhook payload and the review job it creates.
 - `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events.
 - `POST /analysis/rules`: direct rule analysis API for local services and future workers.
@@ -44,6 +47,7 @@ GITHUB_CLIENT_SECRET=
 GITHUB_INSTALLATION_ID=
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
+RUNTIME_CONFIG_PATH=data/runtime-config.json
 AI_DEFAULT_PROVIDER=openai
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -81,6 +85,7 @@ Implemented:
 - JSONL feedback persistence for helpful, unhelpful, accepted, ignored, and missed-risk events.
 - GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
+- Runtime configuration API for Web UI setup without editing `.env`.
 
 Next:
 
