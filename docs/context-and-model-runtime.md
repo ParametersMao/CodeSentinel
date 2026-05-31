@@ -123,4 +123,4 @@ POST /publish/github
 1. GitHub Check Run：`CodeSentinel AI Review`。
 2. PR 首页评论：`CodeSentinel 变更验收报告`。
 
-当前 MVP 使用 `GITHUB_TOKEN` 发布。生产阶段会改为 GitHub App Installation Token，并接入 branch protection required checks。
+当前后端会优先使用 GitHub App Installation Token 发布；如果未配置 `GITHUB_APP_ID`、`GITHUB_PRIVATE_KEY`、`GITHUB_INSTALLATION_ID`，才回退到 `GITHUB_TOKEN`。下一步可接入 branch protection required checks。

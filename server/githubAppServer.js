@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { getRuntimeConfigPath, getRuntimeEnvSync, readRuntimeConfig, saveRuntimeConfig } from './config/runtimeConfigStore.js'
 import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
+import { resolveGitHubApiToken } from './github/appAuth.js'
 import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './github/contextClient.js'
 import { publishGitHubReview } from './github/publisher.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
@@ -241,7 +242,16 @@ async function handleGitHubPublish(request, response) {
 
 async function loadGitHubContextForPayload(payload, reviewConfig) {
   try {
-    return await fetchGitHubPullRequestContext({ payload, reviewConfig, token: getRuntimeEnvSync().GITHUB_TOKEN })
+    const tokenResult = await resolveGitHubApiToken()
+    const context = await fetchGitHubPullRequestContext({ payload, reviewConfig, token: tokenResult.token })
+
+    return {
+      ...context,
+      auth: {
+        source: tokenResult.source,
+        expiresAt: tokenResult.expiresAt,
+      },
+    }
   } catch (error) {
     return {
       source: 'github-api-unavailable',
@@ -373,11 +383,17 @@ export function createGitHubAppServer() {
 
       if (request.method === 'GET' && url.pathname === '/health') {
         const runtimeEnv = getRuntimeEnvSync()
+        const githubAppConfigured = Boolean(
+          runtimeEnv.GITHUB_APP_ID &&
+            (runtimeEnv.GITHUB_PRIVATE_KEY || runtimeEnv.GITHUB_PRIVATE_KEY_PATH) &&
+            runtimeEnv.GITHUB_INSTALLATION_ID,
+        )
         jsonResponse(response, 200, {
           ok: true,
           service: 'codesentinel-github-app',
           webhookSecretConfigured: Boolean(webhookSecret),
           githubTokenConfigured: Boolean(runtimeEnv.GITHUB_TOKEN),
+          githubAppConfigured,
           configPath,
           feedbackStorePath,
           runtimeConfigPath: getRuntimeConfigPath(),

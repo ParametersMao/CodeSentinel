@@ -17,6 +17,7 @@ const runtimeConfigGroups = [
       ['GITHUB_TOKEN', 'GitHub Token', true],
       ['GITHUB_APP_ID', 'GitHub App ID', false],
       ['GITHUB_PRIVATE_KEY', 'GitHub Private Key', true],
+      ['GITHUB_PRIVATE_KEY_PATH', 'Private Key 文件路径', false],
       ['GITHUB_INSTALLATION_ID', 'Installation ID', false],
     ],
   },

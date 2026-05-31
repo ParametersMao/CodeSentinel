@@ -44,6 +44,7 @@ DEEPSEEK_RISK_MODEL=deepseek-reasoner
 ```bash
 GITHUB_APP_ID=
 GITHUB_PRIVATE_KEY=
+GITHUB_PRIVATE_KEY_PATH=
 GITHUB_WEBHOOK_SECRET=
 GITHUB_INSTALLATION_ID=
 ```
@@ -51,7 +52,8 @@ GITHUB_INSTALLATION_ID=
 说明：
 
 - `GITHUB_APP_ID`：GitHub App 页面里的 App ID。
-- `GITHUB_PRIVATE_KEY`：GitHub App 生成的 private key 内容。后续也可以改成读取文件路径。
+- `GITHUB_PRIVATE_KEY`：GitHub App 生成的 private key 内容。
+- `GITHUB_PRIVATE_KEY_PATH`：更推荐的本地方式，填写下载的 `.pem` 文件绝对路径，避免多行密钥粘贴出错。
 - `GITHUB_WEBHOOK_SECRET`：你在 GitHub App Webhook 设置里填写的 Secret。
 - `GITHUB_INSTALLATION_ID`：GitHub App 安装到目标仓库后的 Installation ID。
 

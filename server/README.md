@@ -12,6 +12,7 @@ npm run server:model-check
 npm run server:model-runtime-check
 npm run server:llm-check
 npm run server:ai-review-check
+npm run server:github-app-check
 npm run server:publish-check
 npm run server:rag-check
 npm run server:feedback-check
@@ -47,6 +48,7 @@ GITHUB_WEBHOOK_SECRET=change-me
 GITHUB_TOKEN=
 GITHUB_APP_ID=
 GITHUB_PRIVATE_KEY=
+GITHUB_PRIVATE_KEY_PATH=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_INSTALLATION_ID=
@@ -93,6 +95,7 @@ Implemented:
 - Runtime configuration API for Web UI setup without editing `.env`.
 - AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.
 - GitHub publishing for Check Runs and PR homepage comments.
+- GitHub App JWT and Installation Token exchange for private repository access.
 
 ## Real Model Smoke
 
@@ -111,7 +114,7 @@ This command calls the configured model and consumes provider tokens. If the mod
 - GitHub Check Run: `CodeSentinel AI Review`
 - PR homepage comment: `CodeSentinel 变更验收报告`
 
-It requires a token with Checks and Pull Requests / Issues write permissions. In the current MVP, `GITHUB_TOKEN` is used. The next production step is replacing this with a GitHub App Installation Token.
+It requires a token with Checks and Pull Requests / Issues write permissions. The backend now prefers GitHub App Installation Token when `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY`, and `GITHUB_INSTALLATION_ID` are configured, and falls back to `GITHUB_TOKEN`.
 
 Next:
 

@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
 import { buildFallbackAiReview } from '../review/aiReviewService.js'
+import { resolveGitHubApiToken } from './appAuth.js'
 
 const githubApiBaseUrl = 'https://api.github.com'
 
@@ -124,13 +125,17 @@ export async function createPullRequestComment({ job, aiReview, ruleAnalysis, mo
 }
 
 export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+  const tokenResult = token
+    ? { source: 'provided-token', token }
+    : await resolveGitHubApiToken({ fetchImpl })
   const [checkRun, comment] = await Promise.all([
-    createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token, fetchImpl }),
-    createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }),
+    createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token: tokenResult.token, fetchImpl }),
+    createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token: tokenResult.token, fetchImpl }),
   ])
 
   return {
     status: 'published',
+    tokenSource: tokenResult.source,
     checkRun: {
       id: checkRun.id,
       url: checkRun.html_url ?? checkRun.url,
