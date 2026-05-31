@@ -6,7 +6,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8787'
 
 const severityRank = { P0: 3, P1: 2, P2: 1 }
 
-const views = ['接入配置', '系统配置', '评审工作台', '系统设计', '团队洞察']
+const views = ['接入配置', '系统配置', '评审工作台', '系统状态', '团队质量']
 
 const runtimeConfigGroups = [
   {
@@ -247,67 +247,6 @@ const ragMatches = [
     file: '.ai-reviewer.yml',
     rule: 'auth、tenant、billing、release 路径出现 P0/P1 风险时默认进入合并拦截。',
     similarity: 85,
-  },
-]
-
-const architectureModules = [
-  ['接入层 Webhook & API', '监听 GitHub pull_request 事件，获取 Diff、PR 元数据、Issue 描述、CI 状态和作者信息。'],
-  ['上下文引擎 Context Engine', '读取 .ai-reviewer.yml、依赖配置、完整文件、调用链和测试文件，组织模型可用上下文。'],
-  ['向量检索库 Vector DB', '存储初始化阶段生成的隐式规范、优秀历史代码切片和团队最佳实践，用于在线 RAG 召回。'],
-  ['模型路由大脑 Multi-Agent Router', '简单总结和意图对比走 GPT-4o-mini / Claude Haiku，深度架构与安全推演走 GPT-4o / Claude Sonnet。'],
-]
-
-const platformIntegrations = [
-  {
-    name: 'GitHub Webhook',
-    status: '已接入',
-    detail: '异步队列',
-  },
-  {
-    name: 'GitHub Check Run',
-    status: '已接入',
-    detail: '运行态更新',
-  },
-  {
-    name: 'PR 首页回复',
-    status: '已接入',
-    detail: '验收报告',
-  },
-  {
-    name: 'GitLab Merge Request',
-    status: '规划中',
-    detail: '接口复用',
-  },
-]
-
-const modelRoutes = [
-  {
-    task: 'PR 摘要',
-    model: 'GPT-4o-mini / Claude Haiku',
-    latency: '3-6 秒',
-    cost: '低',
-    reason: '摘要任务强调速度和成本，先给评审人快速建立上下文。',
-  },
-  {
-    task: 'Issue 意图对齐',
-    model: 'GPT-4o-mini',
-    latency: '5-8 秒',
-    cost: '低',
-    reason: '主要做文本对齐和差异归纳，使用快速模型即可覆盖大部分场景。',
-  },
-  {
-    task: '架构 RAG 审查',
-    model: 'Claude Sonnet / GPT-4o',
-    latency: '12-20 秒',
-    cost: '中',
-    reason: '需要理解历史代码模式、边界和设计约束，优先选择强推理模型。',
-  },
-  {
-    task: '安全漏洞推演',
-    model: 'GPT-4o / Claude Sonnet',
-    latency: '15-30 秒',
-    cost: '高',
-    reason: '仅在 P0/P1 候选风险上触发，保证准确性，同时控制总体成本。',
   },
 ]
 
@@ -593,27 +532,6 @@ function compactNumber(value) {
   return String(value)
 }
 
-function statusLabel(status) {
-  const labels = {
-    ready: '已接入',
-    demo: '演示',
-    planned: '规划中',
-    partial: '部分',
-  }
-
-  return labels[status] ?? status
-}
-
-function contextSources(review) {
-  return [
-    ['Git Diff', `${review.metrics.changedLines} 行变更`, 'ready'],
-    ['完整文件', `${review.metrics.files} 个相关文件`, review.source.includes('GitHub') ? 'ready' : 'demo'],
-    ['.ai-reviewer.yml', '硬性规则、目录边界、测试策略', 'planned'],
-    ['需求上下文', `Issue / PR #${review.pr.number}`, review.source.includes('GitHub') ? 'partial' : 'demo'],
-    ['隐式规范', 'core/、api/、service/ 历史代码切片', 'planned'],
-  ]
-}
-
 function buildPrCommentPreview(review, blockerCount) {
   return [
     `## ${review.reportTitle}`,
@@ -697,6 +615,24 @@ function App() {
   const selectedRuntimeConfigGroup = runtimeConfigGroups.find((group) => group.title === activeRuntimeGroup) ?? runtimeConfigGroups[0]
   const prCommentPreview = buildPrCommentPreview(review, blockerCount)
   const selectedFeedback = feedbackByFinding[selectedFinding.id]
+  const configuredRuntimeKeys = useMemo(
+    () => new Set(runtimeConfigFieldsState.filter((field) => field.configured).map((field) => field.key)),
+    [runtimeConfigFieldsState],
+  )
+  const systemHealthItems = [
+    ['GitHub App', configuredRuntimeKeys.has('GITHUB_APP_ID') && configuredRuntimeKeys.has('GITHUB_INSTALLATION_ID'), '仓库鉴权'],
+    ['Webhook', configuredRuntimeKeys.has('GITHUB_WEBHOOK_SECRET'), '事件接收'],
+    ['模型 Provider', configuredRuntimeKeys.has(`${String(runtimeConfig.AI_DEFAULT_PROVIDER || '').toUpperCase()}_API_KEY`), runtimeConfig.AI_DEFAULT_PROVIDER || '未选择'],
+    ['Jira', configuredRuntimeKeys.has('JIRA_API_TOKEN') || configuredRuntimeKeys.has('JIRA_BEARER_TOKEN'), '需求上下文'],
+    ['异步队列', String(runtimeConfig.WEBHOOK_ASYNC_PROCESSING || 'true') !== 'false', `${reviewJobSummary.active ?? 0} 个运行中`],
+    ['审查发布', String(runtimeConfig.WEBHOOK_AUTO_PUBLISH || 'false') === 'true', 'Check Run / 评论'],
+  ]
+  const contextHealthItems = [
+    ['Changed Files', review.metrics.files, '当前 PR'],
+    ['变更行数', review.metrics.changedLines, '当前 PR'],
+    ['高风险路径', review.metrics.highRiskPaths, 'P0/P1'],
+    ['缺失测试', review.metrics.testsMissing, '估算'],
+  ]
   const feedbackCounts = review.findings.reduce(
     (counts, finding) => {
       const value = feedbackByFinding[finding.id]
@@ -1327,65 +1263,78 @@ function App() {
           </>
         )}
 
-        {activeView === '系统设计' && (
+        {activeView === '系统状态' && (
           <section className="system-view">
-            <section className="secondary-view">
-              <article className="context-panel">
+            <section className="system-health-grid">
+              <article className="health-panel">
                 <div className="section-heading">
-                  <span>上下文管线</span>
-                  <strong>5 类来源</strong>
+                  <span>系统健康</span>
+                  <strong>{systemHealthItems.filter(([, ok]) => ok).length}/{systemHealthItems.length} 正常</strong>
                 </div>
-                <div className="source-list">
-                  {contextSources(review).map(([name, detail, status]) => (
-                    <div className="source-row" key={name}>
-                      <span>{name}</span>
-                      <b>{detail}</b>
-                      <em className={status}>{statusLabel(status)}</em>
+                <div className="health-list">
+                  {systemHealthItems.map(([name, ok, detail]) => (
+                    <div className={ok ? 'health-row ok' : 'health-row muted'} key={name}>
+                      <i />
+                      <b>{name}</b>
+                      <span>{detail}</span>
                     </div>
                   ))}
                 </div>
               </article>
 
-              <article className="decision-panel architecture-panel">
+              <article className="health-panel">
                 <div className="section-heading">
-                  <span>系统架构拆解</span>
-                  <strong>V1.0 商业化基线</strong>
+                  <span>上下文覆盖</span>
+                  <strong>当前 PR</strong>
                 </div>
-                {architectureModules.map(([title]) => (
-                  <div className="decision-row" key={title}>
-                    <b>{title}</b>
-                  </div>
-                ))}
+                <div className="context-metrics">
+                  {contextHealthItems.map(([name, value, label]) => (
+                    <div key={name}>
+                      <strong>{value}</strong>
+                      <span>{name}</span>
+                      <em>{label}</em>
+                    </div>
+                  ))}
+                </div>
               </article>
             </section>
 
-            <article className="platform-panel">
+            <article className="health-panel">
               <div className="section-heading">
-                <span>集成状态</span>
-                <strong>发布链路</strong>
+                <span>审查链路</span>
+                <strong>实时状态</strong>
               </div>
-              <div className="platform-grid">
-                {platformIntegrations.map((item) => (
-                  <div className="platform-card" key={item.name}>
-                    <span>{item.status}</span>
-                    <b>{item.name}</b>
-                    <em>{item.detail}</em>
-                  </div>
-                ))}
+              <div className="review-pipeline-grid">
+                {analysisProgress.map(([title], index) => {
+                  const state = index < progressStep ? 'done' : index === progressStep ? 'active' : 'pending'
+
+                  return (
+                    <div className={`review-pipeline-step ${state}`} key={title}>
+                      <i />
+                      <b>{title}</b>
+                      <span>{state === 'done' ? '已完成' : state === 'active' ? '进行中' : '等待'}</span>
+                    </div>
+                  )
+                })}
               </div>
             </article>
 
-            <article className="model-routing-panel">
+            <article className="health-panel">
               <div className="section-heading">
-                <span>模型路由大脑</span>
-                <strong>速度 / 成本 / 准确性</strong>
+                <span>后台任务</span>
+                <strong>{reviewJobSummary.active ?? 0} 个进行中</strong>
               </div>
-              <div className="route-table">
-                {modelRoutes.map((route) => (
-                  <div className="route-row" key={route.task}>
-                    <b>{route.task}</b>
-                    <span>{route.model}</span>
-                    <em>{route.latency} · {route.cost}成本</em>
+              <div className="ops-toolbar">
+                <span>{opsStatus}</span>
+                <button type="button" onClick={loadOperationalStatus}>刷新</button>
+              </div>
+              <div className="ops-job-list">
+                {reviewJobs.length === 0 && <div className="empty-state">当前暂无后台审查任务。</div>}
+                {reviewJobs.slice(0, 6).map((job) => (
+                  <div className="ops-job-row" key={job.id}>
+                    <b>{job.payload?.repository ?? 'unknown'} #{job.payload?.pullRequest ?? '-'}</b>
+                    <span>{job.state}</span>
+                    <em>{job.payload?.autoPublish ? '自动发布' : '仅分析'} · {job.attempts} 次</em>
                   </div>
                 ))}
               </div>
@@ -1393,41 +1342,64 @@ function App() {
           </section>
         )}
 
-        {activeView === '团队洞察' && (
+        {activeView === '团队质量' && (
           <section className="team-view">
+            <section className="quality-metrics">
+              <article>
+                <strong>{reviewRunSummary.total ?? 0}</strong>
+                <span>累计审查</span>
+              </article>
+              <article>
+                <strong>{reviewRunSummary.risksBySeverity?.P0 ?? blockerCount}</strong>
+                <span>P0 风险</span>
+              </article>
+              <article>
+                <strong>{reviewRunSummary.risksBySeverity?.P1 ?? review.findings.filter((finding) => finding.severity === 'P1').length}</strong>
+                <span>P1 风险</span>
+              </article>
+              <article>
+                <strong>{feedbackCounts.noisy}</strong>
+                <span>噪声反馈</span>
+              </article>
+            </section>
+
             <section className="secondary-view compact">
-              <article className="decision-panel">
+              <article className="quality-panel">
                 <div className="section-heading">
-                  <span>质量归因</span>
-                  <strong>处理优先级</strong>
+                  <span>风险分布</span>
+                  <strong>按级别</strong>
                 </div>
-                <div className="target-list">
-                  <div>
-                    <b>代码产物</b>
-                    <span>正确性 / 安全 / 测试</span>
-                  </div>
-                  <div>
-                    <b>生成过程</b>
-                    <span>证据 / 取舍 / 循环</span>
-                  </div>
-                  <div>
-                    <b>责任确认</b>
-                    <span>业务意图 / 风险接受</span>
-                  </div>
+                <div className="risk-bars">
+                  {['P0', 'P1', 'P2'].map((severity) => {
+                    const count = reviewRunSummary.risksBySeverity?.[severity] ?? review.findings.filter((finding) => finding.severity === severity).length
+                    const width = Math.min(100, Math.max(8, count * 22))
+
+                    return (
+                      <div className="risk-bar-row" key={severity}>
+                        <b>{severity}</b>
+                        <span><i style={{ width: `${width}%` }} /></span>
+                        <em>{count}</em>
+                      </div>
+                    )
+                  })}
                 </div>
               </article>
 
-              <article className="roadmap-panel">
+              <article className="quality-panel">
                 <div className="section-heading">
-                  <span>能力路线</span>
-                  <strong>下一阶段</strong>
+                  <span>高频风险</span>
+                  <strong>当前样本</strong>
                 </div>
-                <ul>
-                  <li>IDE 预审</li>
-                  <li>自动修复分支</li>
-                  <li>团队反馈校准</li>
-                  <li>研发质量看板</li>
-                </ul>
+                <div className="top-risk-list">
+                  {review.findings
+                    .filter((finding) => severityRank[finding.severity] >= severityRank.P1)
+                    .map((finding) => (
+                      <div key={finding.id}>
+                        <b>{finding.title}</b>
+                        <span>{finding.severity} · {finding.file}</span>
+                      </div>
+                    ))}
+                </div>
               </article>
             </section>
 
@@ -1447,33 +1419,6 @@ function App() {
                   <div className="calibration-card" key={title}>
                     <b>{title}</b>
                     <p>{detail}</p>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="ops-panel">
-              <div className="section-heading">
-                <span>运行状态</span>
-                <strong>队列 / 审查记录</strong>
-              </div>
-              <div className="ops-toolbar">
-                <span>{opsStatus}</span>
-                <button type="button" onClick={loadOperationalStatus}>刷新</button>
-              </div>
-              <div className="ops-metrics">
-                <span><strong>{reviewJobSummary.active ?? 0}</strong> 进行中任务</span>
-                <span><strong>{reviewJobSummary.total ?? 0}</strong> 队列任务</span>
-                <span><strong>{reviewRunSummary.total ?? 0}</strong> 审查记录</span>
-                <span><strong>{reviewRunSummary.risksBySeverity?.P0 ?? 0}</strong> P0 累计</span>
-              </div>
-              <div className="ops-job-list">
-                {reviewJobs.length === 0 && <div className="empty-state">当前暂无后台审查任务。</div>}
-                {reviewJobs.slice(0, 5).map((job) => (
-                  <div className="ops-job-row" key={job.id}>
-                    <b>{job.payload?.repository ?? 'unknown'} #{job.payload?.pullRequest ?? '-'}</b>
-                    <span>{job.state}</span>
-                    <em>{job.payload?.autoPublish ? '自动发布' : '仅分析'} · {job.attempts} 次</em>
                   </div>
                 ))}
               </div>
