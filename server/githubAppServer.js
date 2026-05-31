@@ -14,15 +14,21 @@ import { createGitHubSignature, verifyGitHubSignature } from './github/verifySig
 import { buildModelRoutePlan } from './models/modelRouter.js'
 import { retrieveReviewContext } from './rag/contextRetriever.js'
 import { buildFallbackAiReview, generateAiReview } from './review/aiReviewService.js'
+import { readReviewRuns, saveReviewRun, summarizeReviewRuns } from './reviews/reviewRunStore.js'
 import { runRuleEngine } from './rules/ruleEngine.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
+const defaultReviewRunStorePath = path.resolve(process.cwd(), 'data/review-runs.jsonl')
 
 function isRuntimeFlagEnabled(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
+
+function getReviewRunStorePath() {
+  return path.resolve(getRuntimeEnvSync().REVIEW_RUN_STORE_PATH ?? process.env.REVIEW_RUN_STORE_PATH ?? defaultReviewRunStorePath)
 }
 
 function jsonResponse(response, statusCode, body) {
@@ -91,6 +97,14 @@ async function handleGitHubWebhook(request, response) {
         job,
         runAnalysis: () => runPullRequestAnalysis({ payload, loadedConfig, job }),
       })
+      const reviewRun = await saveReviewRun(
+        {
+          source: 'github-webhook-auto-publish',
+          job,
+          ...reviewResult,
+        },
+        getReviewRunStorePath(),
+      )
 
       jsonResponse(response, 202, {
         ok: true,
@@ -102,6 +116,7 @@ async function handleGitHubWebhook(request, response) {
           review: loadedConfig.config.review,
         },
         job,
+        reviewRun,
         ...reviewResult,
       })
       return
@@ -118,6 +133,14 @@ async function handleGitHubWebhook(request, response) {
   }
 
   const reviewResult = await runPullRequestAnalysis({ payload, loadedConfig, job })
+  const reviewRun = await saveReviewRun(
+    {
+      source: 'github-webhook-analysis',
+      job,
+      ...reviewResult,
+    },
+    getReviewRunStorePath(),
+  )
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
@@ -129,6 +152,7 @@ async function handleGitHubWebhook(request, response) {
       review: loadedConfig.config.review,
     },
     job,
+    reviewRun,
     ...reviewResult,
   })
 }
@@ -242,6 +266,19 @@ async function handleGitHubPublish(request, response) {
 
   try {
     const publishResult = await publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext })
+    const reviewRun = await saveReviewRun(
+      {
+        source: 'github-publish-api',
+        job,
+        githubContext,
+        ruleAnalysis,
+        modelRoutePlan,
+        ragContext,
+        aiReview,
+        publishResult,
+      },
+      getReviewRunStorePath(),
+    )
 
     jsonResponse(response, 200, {
       ok: true,
@@ -251,6 +288,7 @@ async function handleGitHubPublish(request, response) {
       ragContext,
       aiReview,
       publishResult,
+      reviewRun,
     })
   } catch (error) {
     jsonResponse(response, 502, {
@@ -395,6 +433,28 @@ async function handleFeedbackSummary(response) {
   })
 }
 
+async function handleReviewRuns(response) {
+  const reviewRunStorePath = getReviewRunStorePath()
+  const runs = await readReviewRuns(reviewRunStorePath)
+
+  jsonResponse(response, 200, {
+    ok: true,
+    storePath: reviewRunStorePath,
+    runs: runs.slice(-50).reverse(),
+  })
+}
+
+async function handleReviewRunSummary(response) {
+  const reviewRunStorePath = getReviewRunStorePath()
+  const runs = await readReviewRuns(reviewRunStorePath)
+
+  jsonResponse(response, 200, {
+    ok: true,
+    storePath: reviewRunStorePath,
+    summary: summarizeReviewRuns(runs),
+  })
+}
+
 async function handleExample(response) {
   const payload = createExamplePullRequestPayload()
   const body = Buffer.from(JSON.stringify(payload))
@@ -444,6 +504,7 @@ export function createGitHubAppServer() {
           githubAppConfigured,
           configPath,
           feedbackStorePath,
+          reviewRunStorePath: getReviewRunStorePath(),
           runtimeConfigPath: getRuntimeConfigPath(),
         })
         return
@@ -494,10 +555,20 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'GET' && url.pathname === '/review-runs') {
+        await handleReviewRuns(response)
+        return
+      }
+
+      if (request.method === 'GET' && url.pathname === '/review-runs/summary') {
+        await handleReviewRunSummary(response)
+        return
+      }
+
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /publish/github', 'POST /feedback', 'GET /feedback/summary'],
+        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /publish/github', 'POST /feedback', 'GET /feedback/summary', 'GET /review-runs', 'GET /review-runs/summary'],
       })
     } catch (error) {
       jsonResponse(response, 500, {

@@ -30,6 +30,7 @@ GITHUB_WEBHOOK_SECRET=任意一串你在 GitHub App Webhook 里配置的密钥
 GITHUB_TOKEN=你的 GitHub Personal Access Token，公开仓库可先不填
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
+REVIEW_RUN_STORE_PATH=data/review-runs.jsonl
 AI_DEFAULT_PROVIDER=deepseek
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com

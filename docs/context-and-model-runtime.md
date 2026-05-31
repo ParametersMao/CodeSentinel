@@ -127,3 +127,5 @@ POST /publish/github
 3. 行级 Diff 评论：默认只发布带有效文件与行号的 P0/P1 风险，最多 5 条；单条行级评论失败时会记录为 skipped，不影响 Check Run 和首页报告。
 
 当前后端会优先使用 GitHub App Installation Token 发布；如果未配置 `GITHUB_APP_ID`、`GITHUB_PRIVATE_KEY`、`GITHUB_INSTALLATION_ID`，才回退到 `GITHUB_TOKEN`。下一步可接入 branch protection required checks。
+
+每次 Webhook 分析或发布都会写入 `REVIEW_RUN_STORE_PATH` 指向的 JSONL 文件，默认是 `data/review-runs.jsonl`。记录只保存审查摘要、风险计数、上下文数量、模型路由和发布状态，不保存 API Key 或 GitHub 私钥。

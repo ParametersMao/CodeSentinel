@@ -52,6 +52,7 @@ const runtimeConfigGroups = [
       ['PORT', '后端端口', false],
       ['AI_REVIEWER_CONFIG_PATH', '审查配置路径', false],
       ['FEEDBACK_STORE_PATH', '反馈日志路径', false],
+      ['REVIEW_RUN_STORE_PATH', '审查记录路径', false],
       ['RUNTIME_CONFIG_PATH', '运行时配置路径', false],
     ],
   },
