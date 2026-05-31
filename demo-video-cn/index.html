@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f5f7fb;
+        color: #0f172a;
+        font-family: Arial, sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f5f7fb;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #f5f7fb;
+      }
+
+      .scene-inner {
+        width: 100%;
+        height: 100%;
+        padding: 74px 96px;
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        color: #64748b;
+        font-size: 26px;
+        font-weight: 800;
+      }
+
+      .logo {
+        width: 72px;
+        height: 72px;
+        display: grid;
+        place-items: center;
+        border-radius: 18px;
+        background: #2563eb;
+        color: #ffffff;
+        font-family: "Arial Black", Arial, sans-serif;
+        font-size: 42px;
+        box-shadow: 0 18px 40px rgba(37, 99, 235, 0.24);
+      }
+
+      .eyebrow {
+        color: #2563eb;
+        font-size: 28px;
+        font-weight: 900;
+      }
+
+      .hero-title {
+        max-width: 1160px;
+        color: #0f172a;
+        font-family: "Arial Black", Arial, sans-serif;
+        font-size: 104px;
+        line-height: 1.06;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        max-width: 960px;
+        color: #475569;
+        font-size: 34px;
+        line-height: 1.5;
+        font-weight: 700;
+      }
+
+      .hero-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 660px;
+        gap: 56px;
+        align-items: center;
+      }
+
+      .browser-shell,
+      .panel {
+        border: 1px solid #dbe4f0;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.1);
+      }
+
+      .browser-shell {
+        min-height: 520px;
+        overflow: hidden;
+      }
+
+      .browser-top {
+        height: 58px;
+        padding: 0 22px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #ffffff;
+      }
+
+      .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #cbd5e1;
+      }
+
+      .browser-body {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        min-height: 462px;
+      }
+
+      .sidebar {
+        padding: 34px 24px;
+        background: #0f172a;
+        color: #cbd5e1;
+      }
+
+      .sidebar b {
+        display: block;
+        margin-bottom: 28px;
+        color: #ffffff;
+        font-size: 28px;
+      }
+
+      .nav-item {
+        margin: 14px 0;
+        padding: 14px 16px;
+        border-radius: 10px;
+        font-size: 21px;
+        font-weight: 800;
+      }
+
+      .nav-item.active {
+        background: #1e293b;
+        color: #ffffff;
+      }
+
+      .work-area {
+        padding: 28px;
+        display: grid;
+        gap: 18px;
+        background: #f8fafc;
+      }
+
+      .input-card {
+        padding: 22px;
+        display: grid;
+        grid-template-columns: 1fr 150px;
+        gap: 18px;
+        align-items: center;
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        background: #ffffff;
+      }
+
+      .fake-input {
+        padding: 16px 18px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        color: #0f172a;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .blue-button {
+        padding: 16px 22px;
+        border-radius: 10px;
+        background: #2563eb;
+        color: #ffffff;
+        text-align: center;
+        font-size: 22px;
+        font-weight: 900;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .metric {
+        padding: 22px;
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        background: #ffffff;
+      }
+
+      .metric strong {
+        display: block;
+        color: #0f172a;
+        font-size: 46px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .metric span {
+        color: #64748b;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .pain-grid,
+      .config-grid,
+      .parallel-grid,
+      .result-grid {
+        flex: 1;
+        display: grid;
+        gap: 24px;
+      }
+
+      .pain-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+
+      .pain-card,
+      .config-card,
+      .layer-card,
+      .result-card,
+      .quality-card {
+        min-width: 0;
+        padding: 34px;
+        border: 1px solid #dbe4f0;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+      }
+
+      .pain-card b,
+      .config-card b,
+      .layer-card b,
+      .result-card b,
+      .quality-card b {
+        display: block;
+        margin-bottom: 18px;
+        color: #0f172a;
+        font-size: 36px;
+        line-height: 1.2;
+      }
+
+      .pain-card p,
+      .config-card p,
+      .layer-card p,
+      .result-card p,
+      .quality-card p {
+        color: #526071;
+        font-size: 26px;
+        line-height: 1.48;
+        font-weight: 700;
+      }
+
+      .tag {
+        display: inline-flex;
+        margin-bottom: 24px;
+        padding: 10px 18px;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #2563eb;
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .config-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .config-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .config-row {
+        display: grid;
+        grid-template-columns: 16px 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 16px 18px;
+        border: 1px solid #dbe4f0;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 22px;
+        font-weight: 850;
+      }
+
+      .green-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #16a34a;
+      }
+
+      .status {
+        color: #16a34a;
+        font-size: 18px;
+      }
+
+      .timeline-panel {
+        padding: 34px;
+        border-radius: 16px;
+        background: #0f172a;
+        color: #e2e8f0;
+        box-shadow: 0 26px 80px rgba(15, 23, 42, 0.18);
+      }
+
+      .code-line {
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        gap: 20px;
+        padding: 14px 0;
+        color: #cbd5e1;
+        font-family: "Courier New", monospace;
+        font-size: 24px;
+      }
+
+      .code-line.risk {
+        margin: 8px -16px;
+        padding: 16px;
+        border-radius: 10px;
+        background: rgba(220, 38, 38, 0.22);
+        color: #ffffff;
+      }
+
+      .parallel-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        align-items: center;
+      }
+
+      .layer-card {
+        min-height: 390px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .layer-card em {
+        color: #2563eb;
+        font-size: 58px;
+        font-style: normal;
+        font-weight: 950;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .result-grid {
+        grid-template-columns: 0.8fr 1.2fr;
+        align-items: stretch;
+      }
+
+      .score {
+        display: grid;
+        place-items: center;
+        min-height: 420px;
+        color: #ffffff;
+        border-radius: 18px;
+        background: #0f172a;
+      }
+
+      .score strong {
+        font-size: 142px;
+        font-family: "Arial Black", Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .score span {
+        margin-top: 16px;
+        color: #cbd5e1;
+        font-size: 30px;
+        font-weight: 850;
+      }
+
+      .blocker {
+        border-color: rgba(220, 38, 38, 0.36);
+      }
+
+      .p0,
+      .p1 {
+        display: inline-flex;
+        min-width: 64px;
+        justify-content: center;
+        margin-right: 14px;
+        padding: 8px 12px;
+        border-radius: 9px;
+        color: #ffffff;
+        font-size: 22px;
+        font-weight: 950;
+      }
+
+      .p0 {
+        background: #dc2626;
+      }
+
+      .p1 {
+        background: #ea580c;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .checklist div {
+        padding: 16px 18px;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #334155;
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      .quality-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .quality-card strong {
+        display: block;
+        color: #2563eb;
+        font-size: 68px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .final-panel {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 36px;
+        align-items: center;
+      }
+
+      .final-copy {
+        padding: 44px;
+        border-radius: 20px;
+        background: #0f172a;
+        color: #ffffff;
+      }
+
+      .final-copy b {
+        display: block;
+        margin-bottom: 22px;
+        font-size: 54px;
+        line-height: 1.16;
+      }
+
+      .final-copy p {
+        color: #cbd5e1;
+        font-size: 28px;
+        line-height: 1.55;
+        font-weight: 750;
+      }
+
+      .scope-list {
+        display: grid;
+        gap: 18px;
+      }
+
+      .scope-list div {
+        padding: 24px 28px;
+        border: 1px solid #dbe4f0;
+        border-radius: 14px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 28px;
+        font-weight: 900;
+      }
+
+      .transition-bar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: -240px;
+        width: 240px;
+        z-index: 20;
+        background: #2563eb;
+        box-shadow: 40px 0 80px rgba(37, 99, 235, 0.24);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="56"
+      data-width="1920"
+      data-height="1080"
+    >
+      <section id="scene-1" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>CodeSentinel · 代码哨兵 AI Review</span></div>
+          <div class="hero-layout">
+            <div>
+              <div class="eyebrow">AI 辅助 Pull Request Review</div>
+              <h1 class="hero-title">先判断能不能合，再解释为什么。</h1>
+              <p class="hero-copy">面向个人开发者和小团队的 AI 代码评审工具，自动读取 PR 变更、上下文和项目规则，给出可执行的审查结果。</p>
+            </div>
+            <div class="browser-shell ui-card">
+              <div class="browser-top"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+              <div class="browser-body">
+                <aside class="sidebar"><b>CodeSentinel</b><div class="nav-item active">评审工作台</div><div class="nav-item">系统状态</div><div class="nav-item">团队质量</div></aside>
+                <main class="work-area">
+                  <div class="input-card"><div class="fake-input">github.com/acme/app/pull/421</div><div class="blue-button">开始分析</div></div>
+                  <div class="metric-grid"><div class="metric"><strong>86</strong><span>健康度评分</span></div><div class="metric"><strong>1</strong><span>P0 Blocker</span></div><div class="metric"><strong>3</strong><span>可交给评审人</span></div></div>
+                </main>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>真实 Review 痛点</span></div>
+          <h2 class="hero-title">PR 阶段最贵的，不是看代码，是等判断。</h2>
+          <div class="pain-grid">
+            <article class="pain-card"><span class="tag">周期慢</span><b>资深同学排队 Review</b><p>PR 卡在等待中，测试、发布和下游联调都会被拖住。</p></article>
+            <article class="pain-card"><span class="tag">上下文少</span><b>只看 Diff 容易误判</b><p>一次小改动可能破坏配置、权限、调用链或历史设计约束。</p></article>
+            <article class="pain-card"><span class="tag">误报多</span><b>AI 评论容易打扰</b><p>P2 建议满屏刷存在感，真正该拦的 P0/P1 反而被淹没。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>接入配置</span></div>
+          <h2 class="hero-title">小团队接入，只需要配置三件事。</h2>
+          <div class="config-grid">
+            <div class="config-list">
+              <div class="config-row"><i class="green-dot"></i><span>GitHub App / Webhook</span><b class="status">已配置</b></div>
+              <div class="config-row"><i class="green-dot"></i><span>DeepSeek / OpenAI / Qwen</span><b class="status">已配置</b></div>
+              <div class="config-row"><i class="green-dot"></i><span>.ai-reviewer.yml 项目规则</span><b class="status">已加载</b></div>
+              <div class="config-row"><i class="green-dot"></i><span>反馈与审查记录存储</span><b class="status">已接入</b></div>
+            </div>
+            <div class="timeline-panel">
+              <div class="code-line"><span>01</span><b>pull_request.opened</b></div>
+              <div class="code-line"><span>02</span><b>拉取 changed files / full file</b></div>
+              <div class="code-line"><span>03</span><b>读取依赖、Issue、Jira、历史片段</b></div>
+              <div class="code-line risk"><span>04</span><b>生成审查任务并异步分析</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>三路并发分析</span></div>
+          <h2 class="hero-title">不是让模型盯着十行 Diff 猜。</h2>
+          <div class="parallel-grid">
+            <article class="layer-card"><span class="tag">拦截层</span><b>硬性规则先挡住</b><p>权限、密钥、测试缺失、危险路径直接命中。</p><em>0.8s</em></article>
+            <article class="layer-card"><span class="tag">意图层</span><b>对齐需求与变更</b><p>比较 Issue / Jira 与代码 Diff，判断有没有偏离目标。</p><em>4.2s</em></article>
+            <article class="layer-card"><span class="tag">架构层</span><b>RAG 召回历史模式</b><p>用隐式规范和优秀历史代码片段减少误判。</p><em>12s</em></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>PR 评审结果</span></div>
+          <h2 class="hero-title">输出给人看的结论，而不是一堆 AI 碎碎念。</h2>
+          <div class="result-grid">
+            <div class="score"><div><strong>86</strong><span>健康度评分 · 需要处理后合并</span></div></div>
+            <div class="config-list">
+              <article class="result-card blocker"><b><span class="p0">P0</span>合并权限校验可能被绕过</b><p>新增快速返回路径发生在权限校验之前，合并闸口应保持阻断。</p></article>
+              <article class="result-card"><b><span class="p1">P1</span>Review 查询可能丢失租户过滤</b><p>建议补充 tenantId 条件，并添加多租户回归测试。</p></article>
+              <div class="checklist"><div>低风险建议收敛为 Checklist</div><div>P2 不主动打扰开发者</div><div>可一键采纳修改建议</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-6" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>团队质量闭环</span></div>
+          <h2 class="hero-title">每一次 Review，都会沉淀成团队资产。</h2>
+          <div class="quality-grid">
+            <article class="quality-card"><strong>128</strong><b>累计审查</b><p>PR 结果、风险等级和评论反馈持续记录。</p></article>
+            <article class="quality-card"><strong>12</strong><b>P0 拦截</b><p>真正影响合并的风险会被优先呈现。</p></article>
+            <article class="quality-card"><strong>31</strong><b>误报样本</b><p>开发者反馈会反向校准规则和模型阈值。</p></article>
+            <article class="quality-card"><strong>4类</strong><b>高频风险</b><p>帮助团队定位培训、规范和测试短板。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-7" class="scene">
+        <div class="scene-inner">
+          <div class="brand-row"><div class="logo">C</div><span>当前可用范围</span></div>
+          <div class="final-panel">
+            <div class="final-copy">
+              <b>个人和小团队，已经可以真实接入。</b>
+              <p>配置 GitHub App、模型 Provider、项目规则和存储后，CodeSentinel 就能监听 PR、拉取上下文、执行 AI Review，并把结果发布回评审流程。</p>
+            </div>
+            <div class="scope-list">
+              <div>可用：GitHub PR 自动分析</div>
+              <div>可用：P0/P1 合并闸口建议</div>
+              <div>可用：PR 报告与反馈闭环</div>
+              <div>增强中：正式数据库、权限、多租户、队列服务</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="transition-bar" data-layout-ignore></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const scenes = ["#scene-1", "#scene-2", "#scene-3", "#scene-4", "#scene-5", "#scene-6", "#scene-7"];
+      const starts = [0, 8, 16, 24, 32, 41, 49];
+      const transitionTimes = [7.4, 15.4, 23.4, 31.4, 40.4, 48.4];
+      const animateFrom = (selector, vars, at) => {
+        if (document.querySelectorAll(selector).length > 0) {
+          tl.from(selector, vars, at);
+        }
+      };
+
+      tl.set(scenes, { autoAlpha: 0 }, 0);
+      scenes.forEach((scene, index) => {
+        tl.set(scene, { autoAlpha: 1 }, starts[index]);
+        animateFrom(`${scene} .brand-row`, { y: -28, opacity: 0, duration: 0.55, ease: "power3.out" }, starts[index] + 0.18);
+        animateFrom(`${scene} .hero-title`, { y: 44, opacity: 0, duration: 0.7, ease: "expo.out" }, starts[index] + 0.38);
+        animateFrom(`${scene} .eyebrow, ${scene} .hero-copy`, { x: -26, opacity: 0, duration: 0.52, ease: "power2.out", stagger: 0.1 }, starts[index] + 0.68);
+        animateFrom(`${scene} .ui-card, ${scene} .pain-card, ${scene} .config-row, ${scene} .timeline-panel, ${scene} .layer-card, ${scene} .score, ${scene} .result-card, ${scene} .checklist div, ${scene} .quality-card, ${scene} .final-copy, ${scene} .scope-list div`, {
+          y: 34,
+          scale: 0.98,
+          opacity: 0,
+          duration: 0.55,
+          ease: "back.out(1.2)",
+          stagger: 0.08
+        }, starts[index] + 0.92);
+      });
+
+      transitionTimes.forEach((time, index) => {
+        tl.fromTo(".transition-bar", { x: 0 }, { x: 2160, duration: 0.55, ease: "power3.inOut" }, time);
+        tl.set(scenes[index], { autoAlpha: 0 }, time + 0.3);
+      });
+
+      tl.from("#scene-5 .blocker", { scale: 1.06, borderColor: "#dc2626", duration: 0.45, ease: "power2.out" }, 35.5);
+      tl.to("#root", { backgroundColor: "#0f172a", duration: 0.6, ease: "sine.inOut" }, 55.1);
+      tl.to("#scene-7", { opacity: 0, duration: 0.65, ease: "sine.inOut" }, 55.25);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
