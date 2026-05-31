@@ -17,6 +17,9 @@
     "server:feedback-check": "node server/feedback/feedbackStore.js --check",
     "server:runtime-config-check": "node server/config/runtimeConfigStore.js --check",
     "server:model-runtime-check": "node server/models/modelRuntime.js --check",
+    "server:llm-check": "node server/models/llmClient.js --check",
+    "server:ai-review-check": "node server/review/aiReviewService.js --check",
+    "server:ai-review-smoke": "node server/review/smokeRealModel.js",
     "server:context-check": "node server/github/contextClient.js --check"
   },
   "dependencies": {

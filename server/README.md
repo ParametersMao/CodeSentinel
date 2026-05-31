@@ -10,6 +10,8 @@ npm run server:config-check
 npm run server:rules-check
 npm run server:model-check
 npm run server:model-runtime-check
+npm run server:llm-check
+npm run server:ai-review-check
 npm run server:rag-check
 npm run server:feedback-check
 npm run server:runtime-config-check
@@ -31,6 +33,7 @@ http://127.0.0.1:8787
 - `GET /webhooks/github/example`: sample GitHub webhook payload and the review job it creates.
 - `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events.
 - `POST /analysis/rules`: direct rule analysis API for local services and future workers.
+- `POST /analysis/ai-review`: run rule analysis, RAG context recall, model routing, and AI-generated review.
 - `POST /feedback`: persist reviewer feedback events.
 - `GET /feedback/summary`: summarize persisted feedback events.
 
@@ -86,6 +89,17 @@ Implemented:
 - GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
+- AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.
+
+## Real Model Smoke
+
+After saving provider credentials in the Web UI and starting the backend, run:
+
+```bash
+npm run server:ai-review-smoke
+```
+
+This command calls the configured model and consumes provider tokens. If the model call fails, the API returns a fallback review generated from the local rule engine.
 
 Next:
 

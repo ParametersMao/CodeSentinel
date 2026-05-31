@@ -11,6 +11,7 @@ import { createExamplePullRequestPayload, createPullRequestJob } from './github/
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
 import { retrieveReviewContext } from './rag/contextRetriever.js'
+import { buildFallbackAiReview, generateAiReview } from './review/aiReviewService.js'
 import { runRuleEngine } from './rules/ruleEngine.js'
 
 const port = Number(process.env.PORT ?? 8787)
@@ -88,6 +89,7 @@ async function handleGitHubWebhook(request, response) {
     reviewConfig: loadedConfig.config,
     files: analysisFiles,
   })
+  const aiReview = await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
@@ -102,6 +104,7 @@ async function handleGitHubWebhook(request, response) {
     ruleAnalysis,
     modelRoutePlan,
     ragContext,
+    aiReview,
   })
 }
 
@@ -129,6 +132,9 @@ async function handleRuleAnalysis(request, response) {
     reviewConfig: loadedConfig.config,
     files,
   })
+  const aiReview = input.generateAiReview
+    ? await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
+    : null
 
   jsonResponse(response, 200, {
     ok: true,
@@ -142,6 +148,44 @@ async function handleRuleAnalysis(request, response) {
     ruleAnalysis,
     modelRoutePlan,
     ragContext,
+    aiReview,
+  })
+}
+
+async function handleAiReviewAnalysis(request, response) {
+  const body = await readRequestBody(request)
+  const loadedConfig = await loadAiReviewerConfig(configPath)
+  let input
+
+  try {
+    input = JSON.parse(body.toString('utf8') || '{}')
+  } catch {
+    jsonResponse(response, 400, { ok: false, error: 'Invalid JSON payload' })
+    return
+  }
+
+  const payload = input.payload ?? createExamplePullRequestPayload()
+  const eventName = input.eventName ?? 'pull_request'
+  const githubContext = input.githubContext ?? (input.fetchGitHubContext ? await loadGitHubContextForPayload(payload, loadedConfig.config) : null)
+  const files = Array.isArray(input.files) ? input.files : buildAnalysisFiles(payload, githubContext)
+  const job = input.job ?? createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = input.ruleAnalysis ?? runRuleEngine({ job, reviewConfig: loadedConfig.config, files })
+  const modelRoutePlan = input.modelRoutePlan ?? buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
+  const ragContext = input.ragContext ?? retrieveReviewContext({
+    query: input.query ?? [job.pullRequest.title, ruleAnalysis.findings.map((finding) => finding.rule).join(' ')].join(' '),
+    reviewConfig: loadedConfig.config,
+    files,
+  })
+  const aiReview = await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
+
+  jsonResponse(response, 200, {
+    ok: true,
+    job,
+    githubContext,
+    ruleAnalysis,
+    modelRoutePlan,
+    ragContext,
+    aiReview,
   })
 }
 
@@ -197,6 +241,17 @@ function buildAnalysisFiles(payload, githubContext) {
   }
 
   return payload.files ?? []
+}
+
+async function generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan }) {
+  try {
+    return await generateAiReview({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
+  } catch (error) {
+    return {
+      ...buildFallbackAiReview({ ruleAnalysis, ragContext }),
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 async function handleFeedback(request, response) {
@@ -305,6 +360,11 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'POST' && url.pathname === '/analysis/ai-review') {
+        await handleAiReviewAnalysis(request, response)
+        return
+      }
+
       if (request.method === 'POST' && url.pathname === '/feedback') {
         await handleFeedback(request, response)
         return
@@ -318,7 +378,7 @@ export function createGitHubAppServer() {
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /feedback', 'GET /feedback/summary'],
+        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /feedback', 'GET /feedback/summary'],
       })
     } catch (error) {
       jsonResponse(response, 500, {

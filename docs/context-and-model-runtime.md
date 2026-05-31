@@ -87,6 +87,25 @@ OPENAI_RISK_MODEL=gpt-4o
 
 1. 接 GitHub App Installation Token。
 2. 创建 GitHub Check Run。
-3. 将模型路由从“计划”升级为真实 LLM 调用。
-4. 接入 Jira API 和企业知识库。
-5. 将本地 RAG scorer 替换为真实向量库。
+3. 接入 Jira API 和企业知识库。
+4. 将本地 RAG scorer 替换为真实向量库。
+
+## AI Review 调用
+
+当前后端提供：
+
+```text
+POST /analysis/ai-review
+```
+
+该接口会串联 PR Job、规则引擎、RAG 上下文召回、模型路由和 OpenAI-compatible Chat Completions 调用。
+
+已支持 OpenAI、DeepSeek、Qwen 这类兼容 `/chat/completions` 的 Provider。Anthropic 适配器保留为后续扩展。
+
+本地真实模型冒烟：
+
+```bash
+npm run server:ai-review-smoke
+```
+
+该命令会消耗模型 Token，因此不会放进默认自检。
