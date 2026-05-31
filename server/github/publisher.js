@@ -1,10 +1,10 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
 import { buildFallbackAiReview } from '../review/aiReviewService.js'
 import { resolveGitHubApiToken } from './appAuth.js'
 
 const githubApiBaseUrl = 'https://api.github.com'
+const checkRunName = 'CodeSentinel AI Review'
 
 function parseRepositoryFullName(fullName) {
   const [owner, repo] = String(fullName ?? '').split('/')
@@ -26,15 +26,15 @@ function buildHeaders(token) {
   }
 }
 
-async function postGitHubJson(url, body, { token, fetchImpl = fetch }) {
+async function requestGitHubJson(url, { method, body, token, fetchImpl = fetch }) {
   if (!token) {
-    throw new Error('GITHUB_TOKEN is required to publish GitHub review results')
+    throw new Error('GitHub API token is required to publish review results')
   }
 
   const response = await fetchImpl(url, {
-    method: 'POST',
+    method,
     headers: buildHeaders(token),
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : undefined,
   })
   const payload = await response.json().catch(() => ({}))
 
@@ -45,22 +45,57 @@ async function postGitHubJson(url, body, { token, fetchImpl = fetch }) {
   return payload
 }
 
+function postGitHubJson(url, body, options) {
+  return requestGitHubJson(url, { ...options, method: 'POST', body })
+}
+
+function patchGitHubJson(url, body, options) {
+  return requestGitHubJson(url, { ...options, method: 'PATCH', body })
+}
+
 function severityIcon(severity) {
   if (severity === 'P0') return '⛔'
   if (severity === 'P1') return '⚠️'
   return 'ℹ️'
 }
 
+function getEffectiveRisks(aiReview, ruleAnalysis) {
+  return aiReview.review.risks.length ? aiReview.review.risks : ruleAnalysis.findings
+}
+
+function getEffectiveMergeGate(aiReview, ruleAnalysis) {
+  const risks = getEffectiveRisks(aiReview, ruleAnalysis)
+  const blockerCount = risks.filter((risk) => risk.severity === 'P0').length
+  const seriousCount = risks.filter((risk) => risk.severity === 'P1').length
+
+  if (blockerCount > 0) {
+    return {
+      state: 'failure',
+      reason: `AI 校准后仍发现 ${blockerCount} 个 P0 Blocker`,
+      blockerCount,
+      seriousCount,
+    }
+  }
+
+  return {
+    state: 'success',
+    reason: seriousCount > 0 ? `AI 校准后保留 ${seriousCount} 个 P1 风险，建议人工确认` : 'AI 校准后未发现阻断级风险',
+    blockerCount,
+    seriousCount,
+  }
+}
+
 export function formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ragContext }) {
   const review = aiReview.review
   const route = aiReview.route
-  const risks = review.risks.length ? review.risks : ruleAnalysis.findings
+  const risks = getEffectiveRisks(aiReview, ruleAnalysis)
+  const mergeGate = getEffectiveMergeGate(aiReview, ruleAnalysis)
 
   return [
     '## CodeSentinel 变更验收报告',
     '',
     `**生成状态**：${aiReview.status}`,
-    `**合并闸口**：${ruleAnalysis.mergeGate.reason}`,
+    `**合并闸口**：${mergeGate.reason}`,
     `**模型路由**：${route ? `${route.provider}/${route.model}` : modelRoutePlan.mode}`,
     `**上下文召回**：${ragContext.hits?.length ?? 0} 条`,
     '',
@@ -78,21 +113,23 @@ export function formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ra
 }
 
 export function buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext }) {
-  const failure = ruleAnalysis.mergeGate.state === 'failure'
+  const mergeGate = getEffectiveMergeGate(aiReview, ruleAnalysis)
+  const failure = mergeGate.state === 'failure'
   const title = failure ? 'CodeSentinel 发现阻断级风险' : 'CodeSentinel Review 通过'
   const summary = [
     aiReview.review.summary,
     '',
-    `风险数：${aiReview.review.risks.length || ruleAnalysis.findings.length}`,
-    `P0 Blocker：${ruleAnalysis.blockers.length}`,
+    `风险数：${getEffectiveRisks(aiReview, ruleAnalysis).length}`,
+    `P0 Blocker：${mergeGate.blockerCount}`,
     `RAG 召回：${ragContext.hits?.length ?? 0}`,
   ].join('\n')
 
   return {
-    name: 'CodeSentinel AI Review',
+    name: checkRunName,
     head_sha: job.pullRequest.headSha,
     status: 'completed',
     conclusion: failure ? 'failure' : 'success',
+    completed_at: new Date().toISOString(),
     output: {
       title,
       summary,
@@ -106,14 +143,41 @@ export function buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext }
   }
 }
 
-export async function createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export function buildRunningCheckRunPayload({ job }) {
+  return {
+    name: checkRunName,
+    head_sha: job.pullRequest.headSha,
+    status: 'in_progress',
+    started_at: new Date().toISOString(),
+    output: {
+      title: 'CodeSentinel 正在分析 PR',
+      summary: '正在并发执行拦截层、意图层和架构层分析，完成后会更新合并闸口和 PR 验收报告。',
+    },
+  }
+}
+
+export async function createRunningCheckRun({ job, token, fetchImpl }) {
+  const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
+  const payload = buildRunningCheckRunPayload({ job })
+
+  return postGitHubJson(`${githubApiBaseUrl}/repos/${owner}/${repo}/check-runs`, payload, { token, fetchImpl })
+}
+
+export async function updateCheckRun({ job, checkRunId, aiReview, ruleAnalysis, ragContext, token, fetchImpl }) {
+  const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
+  const payload = buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext })
+
+  return patchGitHubJson(`${githubApiBaseUrl}/repos/${owner}/${repo}/check-runs/${checkRunId}`, payload, { token, fetchImpl })
+}
+
+export async function createCheckRun({ job, aiReview, ruleAnalysis, ragContext, token, fetchImpl }) {
   const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
   const payload = buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext })
 
   return postGitHubJson(`${githubApiBaseUrl}/repos/${owner}/${repo}/check-runs`, payload, { token, fetchImpl })
 }
 
-export async function createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export async function createPullRequestComment({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }) {
   const { owner, repo } = parseRepositoryFullName(job.repository.fullName)
   const body = formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ragContext })
 
@@ -124,7 +188,7 @@ export async function createPullRequestComment({ job, aiReview, ruleAnalysis, mo
   )
 }
 
-export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token = getRuntimeEnvSync().GITHUB_TOKEN, fetchImpl }) {
+export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext, token, fetchImpl }) {
   const tokenResult = token
     ? { source: 'provided-token', token }
     : await resolveGitHubApiToken({ fetchImpl })
@@ -148,17 +212,88 @@ export async function publishGitHubReview({ job, aiReview, ruleAnalysis, modelRo
   }
 }
 
+export async function publishGitHubReviewWithStatusFlow({ job, runAnalysis, token, fetchImpl }) {
+  const tokenResult = token
+    ? { source: 'provided-token', token }
+    : await resolveGitHubApiToken({ fetchImpl })
+  const runningCheckRun = await createRunningCheckRun({ job, token: tokenResult.token, fetchImpl })
+
+  try {
+    const analysisResult = await runAnalysis()
+    const [checkRun, comment] = await Promise.all([
+      updateCheckRun({
+        job,
+        checkRunId: runningCheckRun.id,
+        aiReview: analysisResult.aiReview,
+        ruleAnalysis: analysisResult.ruleAnalysis,
+        ragContext: analysisResult.ragContext,
+        token: tokenResult.token,
+        fetchImpl,
+      }),
+      createPullRequestComment({
+        job,
+        aiReview: analysisResult.aiReview,
+        ruleAnalysis: analysisResult.ruleAnalysis,
+        modelRoutePlan: analysisResult.modelRoutePlan,
+        ragContext: analysisResult.ragContext,
+        token: tokenResult.token,
+        fetchImpl,
+      }),
+    ])
+
+    return {
+      ...analysisResult,
+      publishResult: {
+        status: 'published',
+        tokenSource: tokenResult.source,
+        checkRun: {
+          id: checkRun.id,
+          url: checkRun.html_url ?? checkRun.url,
+          conclusion: checkRun.conclusion,
+        },
+        comment: {
+          id: comment.id,
+          url: comment.html_url ?? comment.url,
+        },
+      },
+    }
+  } catch (error) {
+    await patchGitHubJson(
+      runningCheckRun.url ?? `${githubApiBaseUrl}/repos/${parseRepositoryFullName(job.repository.fullName).owner}/${parseRepositoryFullName(job.repository.fullName).repo}/check-runs/${runningCheckRun.id}`,
+      {
+        name: checkRunName,
+        status: 'completed',
+        conclusion: 'failure',
+        completed_at: new Date().toISOString(),
+        output: {
+          title: 'CodeSentinel 分析失败',
+          summary: error instanceof Error ? error.message : String(error),
+        },
+      },
+      { token: tokenResult.token, fetchImpl },
+    )
+    throw error
+  }
+}
+
 async function runCheck() {
   const calls = []
   const fetchImpl = async (url, options) => {
-    calls.push({ url, body: JSON.parse(options.body) })
+    calls.push({ url, method: options.method, body: JSON.parse(options.body) })
     return {
       ok: true,
-      status: 201,
-      json: async () =>
-        url.endsWith('/check-runs')
-          ? { id: 1, conclusion: 'failure', html_url: 'https://github.com/acme/codesentinel/runs/1' }
-          : { id: 2, html_url: 'https://github.com/acme/codesentinel/pull/42#issuecomment-2' },
+      status: options.method === 'PATCH' ? 200 : 201,
+      json: async () => {
+        if (url.endsWith('/check-runs') && options.method === 'POST') {
+          return { id: 1, status: 'in_progress', url: 'https://api.github.com/repos/acme/codesentinel/check-runs/1' }
+        }
+
+        if (url.includes('/check-runs/')) {
+          return { id: 1, conclusion: 'failure', html_url: 'https://github.com/acme/codesentinel/runs/1' }
+        }
+
+        return { id: 2, html_url: 'https://github.com/acme/codesentinel/pull/42#issuecomment-2' }
+      },
     }
   }
   const job = {
@@ -173,21 +308,29 @@ async function runCheck() {
   }
   const ragContext = { hits: [{ id: 'context' }] }
   const aiReview = buildFallbackAiReview({ ruleAnalysis, ragContext })
-  const result = await publishGitHubReview({
+  const result = await publishGitHubReviewWithStatusFlow({
     job,
-    aiReview,
-    ruleAnalysis,
-    modelRoutePlan: { mode: 'deep-review' },
-    ragContext,
     token: 'test-token',
     fetchImpl,
+    runAnalysis: async () => ({
+      ruleAnalysis,
+      ragContext,
+      aiReview,
+      modelRoutePlan: { mode: 'deep-review' },
+    }),
   })
 
-  if (result.status !== 'published' || calls.length !== 2 || !calls[0].body.head_sha || !calls[1].body.body) {
+  if (
+    result.publishResult.status !== 'published' ||
+    calls.length !== 3 ||
+    calls[0].body.status !== 'in_progress' ||
+    calls[1].method !== 'PATCH' ||
+    !calls[2].body.body
+  ) {
     throw new Error('GitHub publisher self-check failed')
   }
 
-  console.log(JSON.stringify({ ok: true, calls: calls.length, status: result.status }, null, 2))
+  console.log(JSON.stringify({ ok: true, calls: calls.length, status: result.publishResult.status }, null, 2))
 }
 
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])

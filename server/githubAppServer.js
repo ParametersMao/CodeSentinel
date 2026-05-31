@@ -8,7 +8,7 @@ import { getRuntimeConfigPath, getRuntimeEnvSync, readRuntimeConfig, saveRuntime
 import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
 import { resolveGitHubApiToken } from './github/appAuth.js'
 import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './github/contextClient.js'
-import { publishGitHubReview } from './github/publisher.js'
+import { publishGitHubReview, publishGitHubReviewWithStatusFlow } from './github/publisher.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
@@ -20,6 +20,10 @@ const port = Number(process.env.PORT ?? 8787)
 const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
+
+function isRuntimeFlagEnabled(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
 
 function jsonResponse(response, statusCode, body) {
   const payload = JSON.stringify(body, null, 2)
@@ -78,35 +82,54 @@ async function handleGitHubWebhook(request, response) {
 
   const loadedConfig = await loadAiReviewerConfig(configPath)
   const job = createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
-  const githubContext = await loadGitHubContextForPayload(payload, loadedConfig.config)
-  const analysisFiles = buildAnalysisFiles(payload, githubContext)
-  const ruleAnalysis = runRuleEngine({
-    job,
-    reviewConfig: loadedConfig.config,
-    files: analysisFiles,
-  })
-  const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
-  const ragContext = retrieveReviewContext({
-    query: [job.pullRequest.title, job.pullRequest.head, ruleAnalysis.findings.map((finding) => finding.rule).join(' ')].join(' '),
-    reviewConfig: loadedConfig.config,
-    files: analysisFiles,
-  })
-  const aiReview = await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
+  const runtimeEnv = getRuntimeEnvSync()
+  const autoPublish = isRuntimeFlagEnabled(runtimeEnv.WEBHOOK_AUTO_PUBLISH)
+
+  if (autoPublish && job.status === 'queued') {
+    try {
+      const reviewResult = await publishGitHubReviewWithStatusFlow({
+        job,
+        runAnalysis: () => runPullRequestAnalysis({ payload, loadedConfig, job }),
+      })
+
+      jsonResponse(response, 202, {
+        ok: true,
+        signature: signatureResult,
+        autoPublish: true,
+        config: {
+          path: loadedConfig.path,
+          project: loadedConfig.config.project,
+          review: loadedConfig.config.review,
+        },
+        job,
+        ...reviewResult,
+      })
+      return
+    } catch (error) {
+      jsonResponse(response, 502, {
+        ok: false,
+        autoPublish: true,
+        error: 'GitHub webhook auto publish failed',
+        detail: error instanceof Error ? error.message : String(error),
+        job,
+      })
+      return
+    }
+  }
+
+  const reviewResult = await runPullRequestAnalysis({ payload, loadedConfig, job })
 
   jsonResponse(response, job.status === 'queued' ? 202 : 200, {
     ok: true,
     signature: signatureResult,
+    autoPublish: false,
     config: {
       path: loadedConfig.path,
       project: loadedConfig.config.project,
       review: loadedConfig.config.review,
     },
     job,
-    githubContext,
-    ruleAnalysis,
-    modelRoutePlan,
-    ragContext,
-    aiReview,
+    ...reviewResult,
   })
 }
 
@@ -267,6 +290,31 @@ async function loadGitHubContextForPayload(payload, reviewConfig) {
       },
       historicalSnippets: [],
     }
+  }
+}
+
+async function runPullRequestAnalysis({ payload, loadedConfig, job }) {
+  const githubContext = await loadGitHubContextForPayload(payload, loadedConfig.config)
+  const analysisFiles = buildAnalysisFiles(payload, githubContext)
+  const ruleAnalysis = runRuleEngine({
+    job,
+    reviewConfig: loadedConfig.config,
+    files: analysisFiles,
+  })
+  const modelRoutePlan = buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
+  const ragContext = retrieveReviewContext({
+    query: [job.pullRequest.title, job.pullRequest.head, ruleAnalysis.findings.map((finding) => finding.rule).join(' ')].join(' '),
+    reviewConfig: loadedConfig.config,
+    files: analysisFiles,
+  })
+  const aiReview = await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan })
+
+  return {
+    githubContext,
+    ruleAnalysis,
+    modelRoutePlan,
+    ragContext,
+    aiReview,
   }
 }
 

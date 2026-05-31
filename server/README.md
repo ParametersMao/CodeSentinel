@@ -33,7 +33,7 @@ http://127.0.0.1:8787
 - `GET /runtime-config`: read runtime configuration with secret values masked.
 - `POST /runtime-config`: save runtime configuration from the Web UI.
 - `GET /webhooks/github/example`: sample GitHub webhook payload and the review job it creates.
-- `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events.
+- `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events. When `WEBHOOK_AUTO_PUBLISH=true`, it creates a running Check Run first, then publishes the completed review result.
 - `POST /analysis/rules`: direct rule analysis API for local services and future workers.
 - `POST /analysis/ai-review`: run rule analysis, RAG context recall, model routing, and AI-generated review.
 - `POST /publish/github`: publish AI Review result as a GitHub Check Run and PR conversation comment.
@@ -52,6 +52,7 @@ GITHUB_PRIVATE_KEY_PATH=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_INSTALLATION_ID=
+WEBHOOK_AUTO_PUBLISH=false
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 RUNTIME_CONFIG_PATH=data/runtime-config.json
@@ -94,7 +95,7 @@ Implemented:
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
 - AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.
-- GitHub publishing for Check Runs and PR homepage comments.
+- GitHub publishing for Check Runs and PR homepage comments, including a Webhook-triggered running-to-completed Check Run flow.
 - GitHub App JWT and Installation Token exchange for private repository access.
 
 ## Real Model Smoke
@@ -119,6 +120,5 @@ It requires a token with Checks and Pull Requests / Issues write permissions. Th
 Next:
 
 - Replace the local RAG scorer with a durable vector database.
-- Create GitHub Check Runs.
-- Publish PR summary comments and inline review comments.
+- Publish inline review comments.
 - Persist review feedback and analysis results.

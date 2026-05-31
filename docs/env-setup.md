@@ -47,6 +47,7 @@ GITHUB_PRIVATE_KEY=
 GITHUB_PRIVATE_KEY_PATH=
 GITHUB_WEBHOOK_SECRET=
 GITHUB_INSTALLATION_ID=
+WEBHOOK_AUTO_PUBLISH=false
 ```
 
 说明：
@@ -56,6 +57,7 @@ GITHUB_INSTALLATION_ID=
 - `GITHUB_PRIVATE_KEY_PATH`：更推荐的本地方式，填写下载的 `.pem` 文件绝对路径，避免多行密钥粘贴出错。
 - `GITHUB_WEBHOOK_SECRET`：你在 GitHub App Webhook 设置里填写的 Secret。
 - `GITHUB_INSTALLATION_ID`：GitHub App 安装到目标仓库后的 Installation ID。
+- `WEBHOOK_AUTO_PUBLISH`：填 `true` 后，收到真实 PR Webhook 会自动创建 GitHub Check Run，并在分析完成后发布《变更验收报告》评论；未准备好生产使用时建议保持 `false`。
 
 建议权限：
 

@@ -35,17 +35,19 @@ GitHub API 请求失败时，Webhook 不会直接失败。系统会返回：
 
 ## GitHub 配置
 
-公开仓库可以不配置 token，但会受 API 限流影响。私有仓库需要后续接入 GitHub App Installation Token。
+公开仓库可以不配置 token，但会受 API 限流影响。私有仓库推荐配置 GitHub App Installation Token，用于拉取上下文、创建 Check Run 和回写 PR 评论。
 
 ```bash
 GITHUB_WEBHOOK_SECRET=
 GITHUB_TOKEN=
 GITHUB_APP_ID=
 GITHUB_PRIVATE_KEY=
+GITHUB_PRIVATE_KEY_PATH=
 GITHUB_INSTALLATION_ID=
+WEBHOOK_AUTO_PUBLISH=false
 ```
 
-当前已支持 `GITHUB_TOKEN` 作为临时认证方式；GitHub App 私有仓库安装令牌会在下一阶段接入。
+当前会优先使用 `GITHUB_APP_ID`、`GITHUB_PRIVATE_KEY` 或 `GITHUB_PRIVATE_KEY_PATH`、`GITHUB_INSTALLATION_ID` 换取 Installation Token；未配置 GitHub App 时才回退到 `GITHUB_TOKEN`。`WEBHOOK_AUTO_PUBLISH=true` 后，真实 Webhook 会自动创建 Running Check Run，分析完成后更新结果并回写 PR 首页评论。
 
 ## 模型配置
 
@@ -85,10 +87,10 @@ OPENAI_RISK_MODEL=gpt-4o
 
 ## 下一步
 
-1. 接 GitHub App Installation Token。
-2. 创建 GitHub Check Run。
-3. 接入 Jira API 和企业知识库。
-4. 将本地 RAG scorer 替换为真实向量库。
+1. 接入 Jira API 和企业知识库。
+2. 将本地 RAG scorer 替换为真实向量库。
+3. 增加异步任务队列，避免 Webhook 请求长时间占用连接。
+4. 接入 GitHub inline review comments 和 branch protection required checks。
 
 ## AI Review 调用
 
