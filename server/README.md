@@ -64,6 +64,11 @@ AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 REVIEW_RUN_STORE_PATH=data/review-runs.jsonl
 RUNTIME_CONFIG_PATH=data/runtime-config.json
+JIRA_BASE_URL=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+JIRA_BEARER_TOKEN=
+JIRA_PROJECT_KEYS=
 AI_DEFAULT_PROVIDER=openai
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -102,6 +107,7 @@ Implemented:
 - JSONL review run persistence for audit trails, review quality dashboards, and future trend analysis.
 - In-memory async webhook queue so GitHub receives a fast 202 response while analysis continues in the background.
 - GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
+- Optional Jira context connector for PR-linked issue keys such as `ABC-123`.
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
 - AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.

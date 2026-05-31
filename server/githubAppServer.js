@@ -380,7 +380,7 @@ async function loadGitHubContextForPayload(payload, reviewConfig) {
       dependencyFiles: [],
       issues: [],
       jira: {
-        enabled: Boolean(process.env.JIRA_BASE_URL && process.env.JIRA_API_TOKEN),
+        enabled: Boolean(getRuntimeEnvSync().JIRA_BASE_URL && (getRuntimeEnvSync().JIRA_API_TOKEN || getRuntimeEnvSync().JIRA_BEARER_TOKEN)),
         items: [],
         reason: 'Jira context is not connected in this local context step.',
       },

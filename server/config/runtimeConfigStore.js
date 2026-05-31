@@ -17,6 +17,11 @@ export const runtimeConfigKeys = [
   'AI_REVIEWER_CONFIG_PATH',
   'FEEDBACK_STORE_PATH',
   'REVIEW_RUN_STORE_PATH',
+  'JIRA_BASE_URL',
+  'JIRA_EMAIL',
+  'JIRA_API_TOKEN',
+  'JIRA_BEARER_TOKEN',
+  'JIRA_PROJECT_KEYS',
   'AI_DEFAULT_PROVIDER',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
@@ -44,6 +49,8 @@ const secretKeys = new Set([
   'ANTHROPIC_API_KEY',
   'DEEPSEEK_API_KEY',
   'QWEN_API_KEY',
+  'JIRA_API_TOKEN',
+  'JIRA_BEARER_TOKEN',
 ])
 
 export function getRuntimeConfigPath(env = process.env) {

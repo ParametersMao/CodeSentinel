@@ -47,6 +47,17 @@ const runtimeConfigGroups = [
     ],
   },
   {
+    title: '企业需求源',
+    description: '可选连接 Jira，把 PR 标题或描述中的需求单号补全为业务上下文。',
+    fields: [
+      ['JIRA_BASE_URL', 'Jira Base URL', false],
+      ['JIRA_EMAIL', 'Jira 账号邮箱', false],
+      ['JIRA_API_TOKEN', 'Jira API Token', true],
+      ['JIRA_BEARER_TOKEN', 'Jira Bearer Token', true],
+      ['JIRA_PROJECT_KEYS', 'Jira 项目前缀', false],
+    ],
+  },
+  {
     title: '本地运行',
     description: '控制后端端口、审查配置文件、反馈日志和运行时配置保存位置。',
     fields: [

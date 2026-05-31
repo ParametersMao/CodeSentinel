@@ -31,6 +31,11 @@ GITHUB_TOKEN=你的 GitHub Personal Access Token，公开仓库可先不填
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 REVIEW_RUN_STORE_PATH=data/review-runs.jsonl
+JIRA_BASE_URL=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+JIRA_BEARER_TOKEN=
+JIRA_PROJECT_KEYS=
 AI_DEFAULT_PROVIDER=deepseek
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
@@ -61,6 +66,9 @@ WEBHOOK_ASYNC_PROCESSING=true
 - `GITHUB_INSTALLATION_ID`：GitHub App 安装到目标仓库后的 Installation ID。
 - `WEBHOOK_AUTO_PUBLISH`：填 `true` 后，收到真实 PR Webhook 会自动创建 GitHub Check Run，并在分析完成后发布《变更验收报告》评论；未准备好生产使用时建议保持 `false`。
 - `WEBHOOK_ASYNC_PROCESSING`：默认 `true`，Webhook 会快速返回任务号，后台继续分析和发布；本地调试想直接看完整响应时可改为 `false`。
+- `JIRA_BASE_URL`：可选，例如 `https://your-company.atlassian.net`。
+- `JIRA_EMAIL` + `JIRA_API_TOKEN`：Jira Cloud 推荐方式；也可以改用 `JIRA_BEARER_TOKEN`。
+- `JIRA_PROJECT_KEYS`：可选，逗号分隔，例如 `PAY,CRM`，用于限制只识别这些项目前缀的需求单号。
 
 建议权限：
 

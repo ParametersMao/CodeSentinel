@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createExamplePullRequestPayload } from './reviewPipeline.js'
 import { loadAiReviewerConfig } from '../config/aiReviewerConfig.js'
+import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
 
 const githubApiBaseUrl = 'https://api.github.com'
 
@@ -34,6 +35,24 @@ async function requestJson(url, { token, fetchImpl = fetch } = {}) {
   return response.json()
 }
 
+async function requestJiraJson(url, { env, fetchImpl = fetch } = {}) {
+  const email = env.JIRA_EMAIL || env.JIRA_USER_EMAIL || ''
+  const apiToken = env.JIRA_API_TOKEN || ''
+  const bearerToken = env.JIRA_BEARER_TOKEN || ''
+  const headers = {
+    accept: 'application/json',
+    ...(bearerToken ? { authorization: `Bearer ${bearerToken}` } : {}),
+    ...(email && apiToken ? { authorization: `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}` } : {}),
+  }
+  const response = await fetchImpl(url, { headers })
+
+  if (!response.ok) {
+    throw new Error(`Jira API ${response.status}: ${url}`)
+  }
+
+  return response.json()
+}
+
 function decodeBase64Content(content) {
   return Buffer.from(String(content ?? '').replace(/\n/g, ''), 'base64').toString('utf8')
 }
@@ -52,6 +71,37 @@ function parseIssueNumbers(text) {
   }
 
   return [...numbers].filter(Number.isFinite).slice(0, 5)
+}
+
+function parseJiraKeys(text, env = {}) {
+  const allowedProjects = String(env.JIRA_PROJECT_KEYS ?? '')
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
+  const keys = new Set()
+
+  for (const match of String(text ?? '').matchAll(/\b([A-Z][A-Z0-9]+-\d+)\b/g)) {
+    const key = match[1].toUpperCase()
+    const project = key.split('-')[0]
+
+    if (!allowedProjects.length || allowedProjects.includes(project)) {
+      keys.add(key)
+    }
+  }
+
+  return [...keys].slice(0, 5)
+}
+
+function flattenJiraText(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(flattenJiraText).filter(Boolean).join('\n')
+  if (typeof value === 'object') {
+    if (value.text) return String(value.text)
+    if (value.content) return flattenJiraText(value.content)
+  }
+
+  return ''
 }
 
 function normalizeChangedFile(file) {
@@ -151,6 +201,55 @@ async function collectIssues({ owner, repo, pullRequest, token, fetchImpl }) {
   return issues
 }
 
+async function collectJiraItems({ pullRequest, env, fetchImpl }) {
+  const baseUrl = String(env.JIRA_BASE_URL ?? '').replace(/\/$/, '')
+  const authConfigured = Boolean((env.JIRA_EMAIL || env.JIRA_USER_EMAIL) && env.JIRA_API_TOKEN) || Boolean(env.JIRA_BEARER_TOKEN)
+  const keys = parseJiraKeys(`${pullRequest.title}\n${pullRequest.body}`, env)
+
+  if (!baseUrl || !authConfigured) {
+    return {
+      enabled: false,
+      items: keys.map((key) => ({ key, missing: true, reason: 'Jira connector is not configured.' })),
+      reason: 'Set JIRA_BASE_URL plus JIRA_EMAIL/JIRA_API_TOKEN or JIRA_BEARER_TOKEN to fetch Jira issue context.',
+    }
+  }
+
+  const items = []
+
+  for (const key of keys) {
+    try {
+      const issue = await requestJiraJson(
+        `${baseUrl}/rest/api/3/issue/${encodeURIComponent(key)}?fields=summary,status,issuetype,priority,labels,description`,
+        { env, fetchImpl },
+      )
+      const fields = issue.fields ?? {}
+
+      items.push({
+        key: issue.key ?? key,
+        title: fields.summary ?? '',
+        type: fields.issuetype?.name ?? '',
+        status: fields.status?.name ?? '',
+        priority: fields.priority?.name ?? '',
+        labels: fields.labels ?? [],
+        description: flattenJiraText(fields.description).slice(0, 3000),
+        url: `${baseUrl}/browse/${encodeURIComponent(issue.key ?? key)}`,
+      })
+    } catch (error) {
+      items.push({
+        key,
+        missing: true,
+        reason: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  return {
+    enabled: true,
+    items,
+    reason: keys.length ? 'Jira context fetched from linked issue keys.' : 'No Jira issue key found in PR title or description.',
+  }
+}
+
 async function collectHistoricalSnippets({ owner, repo, ref, reviewConfig, token, fetchImpl }) {
   const tree = await requestJson(`${githubApiBaseUrl}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`, {
     token,
@@ -183,7 +282,7 @@ async function collectHistoricalSnippets({ owner, repo, ref, reviewConfig, token
   return snippets
 }
 
-export async function fetchGitHubPullRequestContext({ payload, reviewConfig, token = process.env.GITHUB_TOKEN, fetchImpl = fetch }) {
+export async function fetchGitHubPullRequestContext({ payload, reviewConfig, token = process.env.GITHUB_TOKEN, fetchImpl = fetch, env = getRuntimeEnvSync() }) {
   const repository = payload.repository ?? {}
   const pullRequest = payload.pull_request ?? {}
   const { owner, repo } = parseRepositoryFullName(repository.full_name)
@@ -200,10 +299,11 @@ export async function fetchGitHubPullRequestContext({ payload, reviewConfig, tok
     fetchImpl,
   }).then((files) => files.map(normalizeChangedFile))
 
-  const [fullFiles, dependencyFiles, issues, historicalSnippets] = await Promise.all([
+  const [fullFiles, dependencyFiles, issues, jira, historicalSnippets] = await Promise.all([
     collectFullFiles({ owner, repo, ref, changedFiles, reviewConfig, token, fetchImpl }),
     collectDependencyFiles({ owner, repo, ref, reviewConfig, token, fetchImpl }),
     collectIssues({ owner, repo, pullRequest, token, fetchImpl }),
+    collectJiraItems({ pullRequest, env, fetchImpl }),
     collectHistoricalSnippets({ owner, repo, ref: baseRef, reviewConfig, token, fetchImpl }).catch(() => []),
   ])
 
@@ -221,11 +321,7 @@ export async function fetchGitHubPullRequestContext({ payload, reviewConfig, tok
     fullFiles,
     dependencyFiles,
     issues,
-    jira: {
-      enabled: Boolean(process.env.JIRA_BASE_URL && process.env.JIRA_API_TOKEN),
-      items: [],
-      reason: 'Jira context is configured separately and will be resolved in the enterprise connector step.',
-    },
+    jira,
     historicalSnippets,
   }
 }
@@ -243,13 +339,20 @@ export function buildContextFilesForAnalysis(githubContext) {
       status: 'historical',
       patch: snippet.content,
     })),
+    ...(githubContext?.jira?.items ?? [])
+      .filter((item) => !item.missing)
+      .map((item) => ({
+        filename: `jira/${item.key}.md`,
+        status: 'jira-context',
+        patch: [`# ${item.key} ${item.title}`, `状态：${item.status}`, `优先级：${item.priority}`, '', item.description].join('\n'),
+      })),
   ]
 }
 
 async function runCheck() {
   const { config } = await loadAiReviewerConfig()
   const payload = createExamplePullRequestPayload()
-  payload.pull_request.body = 'Fixes #7'
+  payload.pull_request.body = 'Fixes #7 and validates CS-42'
   const responses = new Map([
     [`${githubApiBaseUrl}/repos/acme/codesentinel/pulls/42/files?per_page=100`, [
       { filename: 'server/api/auth.js', status: 'modified', additions: 12, deletions: 2, changes: 14, patch: '+ validate tenant auth before merge' },
@@ -280,6 +383,17 @@ async function runCheck() {
       body: 'Require tenant isolation.',
       html_url: 'https://github.com/acme/codesentinel/issues/7',
     }],
+    ['https://acme.atlassian.net/rest/api/3/issue/CS-42?fields=summary,status,issuetype,priority,labels,description', {
+      key: 'CS-42',
+      fields: {
+        summary: 'Validate tenant merge flow',
+        status: { name: 'In Progress' },
+        issuetype: { name: 'Story' },
+        priority: { name: 'High' },
+        labels: ['security'],
+        description: { content: [{ content: [{ text: 'Tenant merge must stay protected.' }] }] },
+      },
+    }],
     [`${githubApiBaseUrl}/repos/acme/codesentinel/git/trees/main?recursive=1`, {
       tree: [{ type: 'blob', path: 'server/api/guard.js' }],
     }],
@@ -295,9 +409,20 @@ async function runCheck() {
     status: responses.has(url) ? 200 : 404,
     json: async () => responses.get(url),
   })
-  const context = await fetchGitHubPullRequestContext({ payload, reviewConfig: config, token: '', fetchImpl })
+  const context = await fetchGitHubPullRequestContext({
+    payload,
+    reviewConfig: config,
+    token: '',
+    fetchImpl,
+    env: {
+      JIRA_BASE_URL: 'https://acme.atlassian.net',
+      JIRA_EMAIL: 'reviewer@example.com',
+      JIRA_API_TOKEN: 'jira-token',
+      JIRA_PROJECT_KEYS: 'CS',
+    },
+  })
 
-  if (!context.changedFiles.length || !context.fullFiles.length || !context.dependencyFiles.length || !context.issues.length) {
+  if (!context.changedFiles.length || !context.fullFiles.length || !context.dependencyFiles.length || !context.issues.length || !context.jira.items.length) {
     throw new Error('GitHub context client self-check failed')
   }
 
@@ -309,6 +434,7 @@ async function runCheck() {
         fullFiles: context.fullFiles.length,
         dependencyFiles: context.dependencyFiles.length,
         issues: context.issues.length,
+        jira: context.jira.items.length,
         historicalSnippets: context.historicalSnippets.length,
       },
       null,
