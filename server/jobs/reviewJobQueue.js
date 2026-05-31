@@ -22,6 +22,7 @@ function createQueueJob({ type, payload }) {
 
 export function createReviewJobQueue({ maxAttempts = 1 } = {}) {
   const jobs = new Map()
+  const dedupeIndex = new Map()
 
   async function runJob(job, worker) {
     job.state = 'running'
@@ -51,9 +52,21 @@ export function createReviewJobQueue({ maxAttempts = 1 } = {}) {
   }
 
   return {
-    enqueue({ type, payload, worker }) {
+    enqueue({ type, payload, worker, dedupeKey }) {
+      if (dedupeKey && dedupeIndex.has(dedupeKey)) {
+        const existing = jobs.get(dedupeIndex.get(dedupeKey))
+
+        if (existing && !terminalStates.has(existing.state)) {
+          return { ...existing, deduped: true }
+        }
+      }
+
       const job = createQueueJob({ type, payload })
+      job.dedupeKey = dedupeKey || null
       jobs.set(job.id, job)
+      if (dedupeKey) {
+        dedupeIndex.set(dedupeKey, job.id)
+      }
       queueMicrotask(() => runJob(job, worker))
       return job
     },
@@ -83,8 +96,15 @@ async function runCheck() {
   const queue = createReviewJobQueue()
   const job = queue.enqueue({
     type: 'self-check',
+    dedupeKey: 'self-check:1',
     payload: { value: 41 },
     worker: async (payload) => ({ value: payload.value + 1 }),
+  })
+  const duplicate = queue.enqueue({
+    type: 'self-check',
+    dedupeKey: 'self-check:1',
+    payload: { value: 0 },
+    worker: async (payload) => ({ value: payload.value }),
   })
 
   for (let index = 0; index < 10 && queue.get(job.id)?.state !== 'completed'; index += 1) {
@@ -94,7 +114,7 @@ async function runCheck() {
   const stored = queue.get(job.id)
   const summary = queue.summary()
 
-  if (stored?.state !== 'completed' || stored.result.value !== 42 || summary.byState.completed !== 1) {
+  if (stored?.state !== 'completed' || duplicate.id !== job.id || stored.result.value !== 42 || summary.byState.completed !== 1) {
     throw new Error('Review job queue self-check failed')
   }
 

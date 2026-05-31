@@ -68,6 +68,7 @@ function readRequestBody(request) {
 async function handleGitHubWebhook(request, response) {
   const body = await readRequestBody(request)
   const eventName = request.headers['x-github-event'] ?? 'unknown'
+  const deliveryId = request.headers['x-github-delivery'] ?? ''
   const signature = request.headers['x-hub-signature-256']
   const signatureResult = verifyGitHubSignature({ secret: webhookSecret, body, signature })
 
@@ -98,8 +99,10 @@ async function handleGitHubWebhook(request, response) {
   if (asyncProcessing && job.status === 'queued') {
     const queuedJob = reviewJobQueue.enqueue({
       type: 'github-webhook-review',
+      dedupeKey: deliveryId || `${job.repository.fullName}:${job.pullRequest.number}:${job.pullRequest.headSha}:${eventName}`,
       payload: {
         eventName,
+        deliveryId,
         autoPublish,
         repository: job.repository.fullName,
         pullRequest: job.pullRequest.number,
@@ -532,7 +535,9 @@ function publicQueueJob(job) {
     updatedAt: job.updatedAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
-    attempts: job.attempts,
+      attempts: job.attempts,
+    dedupeKey: job.dedupeKey,
+    deduped: Boolean(job.deduped),
     payload: job.payload,
     result: job.result
       ? {
