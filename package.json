@@ -24,7 +24,8 @@
     "server:publish-check": "node server/github/publisher.js --check",
     "server:context-check": "node server/github/contextClient.js --check",
     "server:review-run-check": "node server/reviews/reviewRunStore.js --check",
-    "server:queue-check": "node server/jobs/reviewJobQueue.js --check"
+    "server:queue-check": "node server/jobs/reviewJobQueue.js --check",
+    "server:implicit-index-check": "node server/rag/implicitStandardIndex.js --check"
   },
   "dependencies": {
     "react": "^19.2.6",

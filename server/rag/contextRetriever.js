@@ -1,6 +1,8 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadAiReviewerConfig } from '../config/aiReviewerConfig.js'
+import { getRuntimeEnvSync } from '../config/runtimeConfigStore.js'
+import { readImplicitStandardIndexSync } from './implicitStandardIndex.js'
 
 function tokenize(text) {
   return String(text ?? '')
@@ -46,11 +48,25 @@ function buildFileSlices(files) {
   }))
 }
 
+function buildIndexedSlices(env) {
+  try {
+    return readImplicitStandardIndexSync({ indexPath: env.IMPLICIT_STANDARD_INDEX_PATH })
+      .map((slice) => ({
+        id: slice.id,
+        source: slice.source,
+        title: slice.title,
+        content: [slice.repository, slice.path, slice.content].filter(Boolean).join('\n'),
+      }))
+  } catch {
+    return []
+  }
+}
+
 export function retrieveReviewContext({ query, reviewConfig, files = [] }) {
   const enabled = reviewConfig.context.rag.enabled
   const topK = reviewConfig.context.rag.recallTopK
   const queryTokens = tokenize(query)
-  const slices = [...buildConfigSlices(reviewConfig), ...buildFileSlices(files)]
+  const slices = [...buildConfigSlices(reviewConfig), ...buildIndexedSlices(getRuntimeEnvSync()), ...buildFileSlices(files)]
 
   if (!enabled || !queryTokens.length) {
     return {

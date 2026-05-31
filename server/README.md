@@ -18,6 +18,7 @@ npm run server:rag-check
 npm run server:feedback-check
 npm run server:review-run-check
 npm run server:queue-check
+npm run server:implicit-index-check
 npm run server:runtime-config-check
 npm run server:context-check
 npm run server:dev
@@ -63,6 +64,7 @@ WEBHOOK_ASYNC_PROCESSING=true
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 REVIEW_RUN_STORE_PATH=data/review-runs.jsonl
+IMPLICIT_STANDARD_INDEX_PATH=data/implicit-standards.json
 RUNTIME_CONFIG_PATH=data/runtime-config.json
 JIRA_BASE_URL=
 JIRA_EMAIL=
@@ -103,6 +105,7 @@ Implemented:
 - Rule engine service module for P0/P1 findings, merge gate state, health score, and low-risk checklist.
 - Model route planning for summary, intent, risk, and architecture tasks with latency budget and fallback strategy.
 - Local RAG-style context retriever for implicit standards and changed-file patches.
+- Local implicit standard index that accumulates historical code snippets for later RAG recall.
 - JSONL feedback persistence for helpful, unhelpful, accepted, ignored, and missed-risk events.
 - JSONL review run persistence for audit trails, review quality dashboards, and future trend analysis.
 - In-memory async webhook queue so GitHub receives a fast 202 response while analysis continues in the background.
@@ -137,5 +140,6 @@ It requires a token with Checks and Pull Requests / Issues write permissions. Th
 Next:
 
 - Replace the local RAG scorer with a durable vector database.
+- Replace the local implicit standard index with an embedding-backed vector database.
 - Replace the in-memory async queue with a durable worker queue for multi-instance deployments.
 - Move review run storage from local JSONL to a durable database.

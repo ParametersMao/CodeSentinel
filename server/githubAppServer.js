@@ -14,6 +14,7 @@ import { createGitHubSignature, verifyGitHubSignature } from './github/verifySig
 import { createReviewJobQueue } from './jobs/reviewJobQueue.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
 import { retrieveReviewContext } from './rag/contextRetriever.js'
+import { upsertImplicitStandardsFromContext } from './rag/implicitStandardIndex.js'
 import { buildFallbackAiReview, generateAiReview } from './review/aiReviewService.js'
 import { readReviewRuns, saveReviewRun, summarizeReviewRuns } from './reviews/reviewRunStore.js'
 import { runRuleEngine } from './rules/ruleEngine.js'
@@ -391,6 +392,11 @@ async function loadGitHubContextForPayload(payload, reviewConfig) {
 
 async function runPullRequestAnalysis({ payload, loadedConfig, job }) {
   const githubContext = await loadGitHubContextForPayload(payload, loadedConfig.config)
+  await upsertImplicitStandardsFromContext({
+    repository: job.repository.fullName,
+    githubContext,
+    indexPath: getRuntimeEnvSync().IMPLICIT_STANDARD_INDEX_PATH,
+  })
   const analysisFiles = buildAnalysisFiles(payload, githubContext)
   const ruleAnalysis = runRuleEngine({
     job,
