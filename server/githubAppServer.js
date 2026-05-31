@@ -7,6 +7,7 @@ import { loadAiReviewerConfig } from './config/aiReviewerConfig.js'
 import { getRuntimeConfigPath, getRuntimeEnvSync, readRuntimeConfig, saveRuntimeConfig } from './config/runtimeConfigStore.js'
 import { readFeedbackEvents, saveFeedbackEvent, summarizeFeedback } from './feedback/feedbackStore.js'
 import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './github/contextClient.js'
+import { publishGitHubReview } from './github/publisher.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
@@ -189,6 +190,55 @@ async function handleAiReviewAnalysis(request, response) {
   })
 }
 
+async function handleGitHubPublish(request, response) {
+  const body = await readRequestBody(request)
+  const loadedConfig = await loadAiReviewerConfig(configPath)
+  let input
+
+  try {
+    input = JSON.parse(body.toString('utf8') || '{}')
+  } catch {
+    jsonResponse(response, 400, { ok: false, error: 'Invalid JSON payload' })
+    return
+  }
+
+  const payload = input.payload ?? createExamplePullRequestPayload()
+  const eventName = input.eventName ?? 'pull_request'
+  const githubContext = input.githubContext ?? (input.fetchGitHubContext ? await loadGitHubContextForPayload(payload, loadedConfig.config) : null)
+  const files = Array.isArray(input.files) ? input.files : buildAnalysisFiles(payload, githubContext)
+  const job = input.job ?? createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
+  const ruleAnalysis = input.ruleAnalysis ?? runRuleEngine({ job, reviewConfig: loadedConfig.config, files })
+  const modelRoutePlan = input.modelRoutePlan ?? buildModelRoutePlan({ reviewConfig: loadedConfig.config, ruleAnalysis })
+  const ragContext = input.ragContext ?? retrieveReviewContext({
+    query: input.query ?? [job.pullRequest.title, ruleAnalysis.findings.map((finding) => finding.rule).join(' ')].join(' '),
+    reviewConfig: loadedConfig.config,
+    files,
+  })
+  const aiReview = input.aiReview ?? (await generateAiReviewSafely({ job, ruleAnalysis, ragContext, githubContext, modelRoutePlan }))
+
+  try {
+    const publishResult = await publishGitHubReview({ job, aiReview, ruleAnalysis, modelRoutePlan, ragContext })
+
+    jsonResponse(response, 200, {
+      ok: true,
+      job,
+      ruleAnalysis,
+      modelRoutePlan,
+      ragContext,
+      aiReview,
+      publishResult,
+    })
+  } catch (error) {
+    jsonResponse(response, 502, {
+      ok: false,
+      error: 'GitHub publish failed',
+      detail: error instanceof Error ? error.message : String(error),
+      job,
+      aiReview,
+    })
+  }
+}
+
 async function loadGitHubContextForPayload(payload, reviewConfig) {
   try {
     return await fetchGitHubPullRequestContext({ payload, reviewConfig, token: getRuntimeEnvSync().GITHUB_TOKEN })
@@ -365,6 +415,11 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'POST' && url.pathname === '/publish/github') {
+        await handleGitHubPublish(request, response)
+        return
+      }
+
       if (request.method === 'POST' && url.pathname === '/feedback') {
         await handleFeedback(request, response)
         return
@@ -378,7 +433,7 @@ export function createGitHubAppServer() {
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /feedback', 'GET /feedback/summary'],
+        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /publish/github', 'POST /feedback', 'GET /feedback/summary'],
       })
     } catch (error) {
       jsonResponse(response, 500, {

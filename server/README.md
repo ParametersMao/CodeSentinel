@@ -12,6 +12,7 @@ npm run server:model-check
 npm run server:model-runtime-check
 npm run server:llm-check
 npm run server:ai-review-check
+npm run server:publish-check
 npm run server:rag-check
 npm run server:feedback-check
 npm run server:runtime-config-check
@@ -34,6 +35,7 @@ http://127.0.0.1:8787
 - `POST /webhooks/github`: GitHub webhook endpoint for `pull_request` events.
 - `POST /analysis/rules`: direct rule analysis API for local services and future workers.
 - `POST /analysis/ai-review`: run rule analysis, RAG context recall, model routing, and AI-generated review.
+- `POST /publish/github`: publish AI Review result as a GitHub Check Run and PR conversation comment.
 - `POST /feedback`: persist reviewer feedback events.
 - `GET /feedback/summary`: summarize persisted feedback events.
 
@@ -90,6 +92,7 @@ Implemented:
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
 - AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.
+- GitHub publishing for Check Runs and PR homepage comments.
 
 ## Real Model Smoke
 
@@ -100,6 +103,15 @@ npm run server:ai-review-smoke
 ```
 
 This command calls the configured model and consumes provider tokens. If the model call fails, the API returns a fallback review generated from the local rule engine.
+
+## GitHub Publish
+
+`POST /publish/github` writes two artifacts:
+
+- GitHub Check Run: `CodeSentinel AI Review`
+- PR homepage comment: `CodeSentinel 变更验收报告`
+
+It requires a token with Checks and Pull Requests / Issues write permissions. In the current MVP, `GITHUB_TOKEN` is used. The next production step is replacing this with a GitHub App Installation Token.
 
 Next:
 

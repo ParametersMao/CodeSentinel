@@ -20,6 +20,7 @@
     "server:llm-check": "node server/models/llmClient.js --check",
     "server:ai-review-check": "node server/review/aiReviewService.js --check",
     "server:ai-review-smoke": "node server/review/smokeRealModel.js",
+    "server:publish-check": "node server/github/publisher.js --check",
     "server:context-check": "node server/github/contextClient.js --check"
   },
   "dependencies": {

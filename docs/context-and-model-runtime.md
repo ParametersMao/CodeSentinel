@@ -109,3 +109,18 @@ npm run server:ai-review-smoke
 ```
 
 该命令会消耗模型 Token，因此不会放进默认自检。
+
+## GitHub 发布
+
+当前后端提供：
+
+```text
+POST /publish/github
+```
+
+该接口会将 AI Review 结果发布为：
+
+1. GitHub Check Run：`CodeSentinel AI Review`。
+2. PR 首页评论：`CodeSentinel 变更验收报告`。
+
+当前 MVP 使用 `GITHUB_TOKEN` 发布。生产阶段会改为 GitHub App Installation Token，并接入 branch protection required checks。
