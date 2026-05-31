@@ -50,16 +50,43 @@ function severityIcon(severity) {
   return 'ℹ️'
 }
 
+function getEffectiveRisks(aiReview, ruleAnalysis) {
+  return aiReview.review.risks.length ? aiReview.review.risks : ruleAnalysis.findings
+}
+
+function getEffectiveMergeGate(aiReview, ruleAnalysis) {
+  const risks = getEffectiveRisks(aiReview, ruleAnalysis)
+  const blockerCount = risks.filter((risk) => risk.severity === 'P0').length
+  const seriousCount = risks.filter((risk) => risk.severity === 'P1').length
+
+  if (blockerCount > 0) {
+    return {
+      state: 'failure',
+      reason: `AI 校准后仍发现 ${blockerCount} 个 P0 Blocker`,
+      blockerCount,
+      seriousCount,
+    }
+  }
+
+  return {
+    state: 'success',
+    reason: seriousCount > 0 ? `AI 校准后保留 ${seriousCount} 个 P1 风险，建议人工确认` : 'AI 校准后未发现阻断级风险',
+    blockerCount,
+    seriousCount,
+  }
+}
+
 export function formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ragContext }) {
   const review = aiReview.review
   const route = aiReview.route
-  const risks = review.risks.length ? review.risks : ruleAnalysis.findings
+  const risks = getEffectiveRisks(aiReview, ruleAnalysis)
+  const mergeGate = getEffectiveMergeGate(aiReview, ruleAnalysis)
 
   return [
     '## CodeSentinel 变更验收报告',
     '',
     `**生成状态**：${aiReview.status}`,
-    `**合并闸口**：${ruleAnalysis.mergeGate.reason}`,
+    `**合并闸口**：${mergeGate.reason}`,
     `**模型路由**：${route ? `${route.provider}/${route.model}` : modelRoutePlan.mode}`,
     `**上下文召回**：${ragContext.hits?.length ?? 0} 条`,
     '',
@@ -77,13 +104,14 @@ export function formatReviewComment({ aiReview, ruleAnalysis, modelRoutePlan, ra
 }
 
 export function buildCheckRunPayload({ job, aiReview, ruleAnalysis, ragContext }) {
-  const failure = ruleAnalysis.mergeGate.state === 'failure'
+  const mergeGate = getEffectiveMergeGate(aiReview, ruleAnalysis)
+  const failure = mergeGate.state === 'failure'
   const title = failure ? 'CodeSentinel 发现阻断级风险' : 'CodeSentinel Review 通过'
   const summary = [
     aiReview.review.summary,
     '',
-    `风险数：${aiReview.review.risks.length || ruleAnalysis.findings.length}`,
-    `P0 Blocker：${ruleAnalysis.blockers.length}`,
+    `风险数：${getEffectiveRisks(aiReview, ruleAnalysis).length}`,
+    `P0 Blocker：${mergeGate.blockerCount}`,
     `RAG 召回：${ragContext.hits?.length ?? 0}`,
   ].join('\n')
 
