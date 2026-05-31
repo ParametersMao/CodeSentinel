@@ -333,8 +333,18 @@ h2 {
 
 .flow-card b {
   display: block;
-  margin-bottom: 10px;
+  margin: 8px 0 10px;
   font-size: 15px;
+}
+
+.flow-card > span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #ecfdf3;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 850;
+  padding: 4px 8px;
 }
 
 .flow-card p,
@@ -346,10 +356,6 @@ h2 {
   color: #526071;
   font-size: 13px;
   line-height: 1.6;
-}
-
-.flow-card p + p {
-  margin-top: 8px;
 }
 
 .setup-grid {
@@ -722,7 +728,7 @@ h2 {
 .summary-panel p,
 .decision-row p,
 .roadmap-panel li,
-.target-list p,
+.target-list span,
 .architecture-strip p {
   overflow-wrap: anywhere;
   color: #526071;
@@ -1104,12 +1110,27 @@ h2 {
 
 .runtime-config-hero,
 .config-status-strip,
-.runtime-config-card {
+.runtime-config-card,
+.runtime-config-hero-inline {
   min-width: 0;
   border: 1px solid #d8e1ee;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+}
+
+.runtime-config-hero-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 18px;
+}
+
+.runtime-config-hero-inline span {
+  color: #172033;
+  font-size: 16px;
+  font-weight: 750;
 }
 
 .runtime-config-hero {
@@ -1163,17 +1184,61 @@ h2 {
   padding: 0 12px;
 }
 
-.runtime-config-grid {
+.runtime-config-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
+}
+
+.runtime-config-nav {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d8e1ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.runtime-config-nav button {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #526071;
+  cursor: pointer;
+  font: 800 13px/1.2 var(--font-ui);
+  padding: 0 10px;
+  text-align: left;
+}
+
+.runtime-config-nav button.active {
+  border-color: #9ec5ff;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.runtime-config-nav b {
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #526274;
+  font-size: 11px;
+  padding: 3px 8px;
 }
 
 .runtime-config-card {
   display: grid;
   gap: 12px;
   padding: 16px;
+}
+
+.runtime-config-card.active {
+  min-height: 560px;
 }
 
 .runtime-config-card > p {
@@ -1185,6 +1250,9 @@ h2 {
 .runtime-field-list {
   display: grid;
   gap: 10px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
 .runtime-field {
@@ -1547,6 +1615,12 @@ h2 {
   font-weight: 850;
 }
 
+.target-list span {
+  color: #526071;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .source-row b {
   color: #5d6b7f;
   font-size: 12px;
@@ -1656,7 +1730,7 @@ h2 {
   .missed-layout,
   .runtime-config-hero,
   .config-status-strip,
-  .runtime-config-grid,
+  .runtime-config-layout,
   .route-row,
   .secondary-view,
   .secondary-view.compact,

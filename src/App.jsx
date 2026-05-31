@@ -184,22 +184,19 @@ const onboardingModes = {
 
 const businessFlow = [
   {
-    stage: '接入期',
-    trigger: '用户授权 GitHub 仓库',
-    action: '双轨初始化：新项目填写架构表单，存量项目拉取高频 core/ 基底目录并生成隐式规范。',
-    output: '仪表盘提示“已为您生成当前项目的 AI 审查规范，请确认或微调”。',
+    stage: '仓库接入',
+    status: '已就绪',
+    detail: 'GitHub App、Webhook 与运行时配置已接入。',
   },
   {
-    stage: '审查期',
-    trigger: '开发者提交 Pull Request',
-    action: '多路并发分析：拦截层匹配硬规则，意图层对比 Issue 与 Diff，架构层用 RAG 检索存量代码。',
-    output: 'GitHub CI/CD 状态显示 Running，目标 30 秒内完成首轮结果。',
+    stage: '审查引擎',
+    status: '可运行',
+    detail: '规则、RAG、模型路由和发布流程已形成闭环。',
   },
   {
-    stage: '反馈期',
-    trigger: '分析完成',
-    action: '生成健康度评分、核心风险点 Blocker，并把低风险建议收敛为 Checklist。',
-    output: 'PR 首页自动回复《变更验收报告》，高危风险进入合并拦截。',
+    stage: '质量沉淀',
+    status: '已接入',
+    detail: '审查记录、反馈日志和隐式规范索引会持续沉淀。',
   },
 ]
 
@@ -263,27 +260,23 @@ const architectureModules = [
 const platformIntegrations = [
   {
     name: 'GitHub Webhook',
-    trigger: 'pull_request.opened / synchronize / reopened',
-    status: '已规划',
-    detail: '接收 PR 事件后异步拉取 Diff、Issue、文件列表和 CI 状态。',
+    status: '已接入',
+    detail: '异步队列',
   },
   {
     name: 'GitHub Check Run',
-    trigger: 'CodeSentinel Review',
-    status: 'Running / Failed',
-    detail: '分析中显示 Running；出现 P0 Blocker 时写入 Failed 并拦截合并。',
+    status: '已接入',
+    detail: '运行态更新',
   },
   {
     name: 'PR 首页回复',
-    trigger: 'analysis.completed',
-    status: '自动发布',
-    detail: '发布《变更验收报告》，包含健康度、Blocker、Checklist 和测试建议。',
+    status: '已接入',
+    detail: '验收报告',
   },
   {
     name: 'GitLab Merge Request',
-    trigger: 'merge_request_events',
-    status: '兼容设计',
-    detail: '抽象 Webhook、Diff、Note、Pipeline 状态，后续复用同一审查内核。',
+    status: '规划中',
+    detail: '接口复用',
   },
 ]
 
@@ -668,6 +661,7 @@ function App() {
   const [runtimeConfigFieldsState, setRuntimeConfigFieldsState] = useState([])
   const [runtimeConfigStatus, setRuntimeConfigStatus] = useState('尚未连接后端配置服务。')
   const [isSavingRuntimeConfig, setIsSavingRuntimeConfig] = useState(false)
+  const [activeRuntimeGroup, setActiveRuntimeGroup] = useState(runtimeConfigGroups[0].title)
   const [opsStatus, setOpsStatus] = useState('尚未读取运行状态。')
   const [feedbackStatus, setFeedbackStatus] = useState('反馈会写入后端，用于后续降噪校准。')
   const [reviewJobSummary, setReviewJobSummary] = useState({ total: 0, active: 0, byState: {} })
@@ -700,7 +694,7 @@ function App() {
   const blockerCount = review.findings.filter((finding) => finding.severity === 'P0').length
   const selectedMode = onboardingModes[projectMode]
   const configPreview = buildConfigPreview(reviewConfig)
-  const blockerRules = listToYamlArray(reviewConfig.blockers)
+  const selectedRuntimeConfigGroup = runtimeConfigGroups.find((group) => group.title === activeRuntimeGroup) ?? runtimeConfigGroups[0]
   const prCommentPreview = buildPrCommentPreview(review, blockerCount)
   const selectedFeedback = feedbackByFinding[selectedFinding.id]
   const feedbackCounts = review.findings.reduce(
@@ -910,18 +904,13 @@ function App() {
           ))}
         </nav>
 
-        <div className="sidebar-note">
-          <span>商业化基线</span>
-          <strong>三路并发审查</strong>
-          <p>当前 Blocker：{blockerRules || '未配置'}。高危风险进入合并拦截，低风险建议收敛到 Checklist。</p>
-        </div>
+
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">AI 辅助 Pull Request Review</span>
-            <h1>AI 架构师 V1.0：先接入规范，再审查变更。</h1>
+            <h1>CodeSentinel</h1>
           </div>
           <form
             className="pr-input"
@@ -952,16 +941,12 @@ function App() {
 
         {activeView === '系统配置' && (
           <section className="runtime-config-view">
-            <article className="runtime-config-hero">
-              <div>
-                <span className="eyebrow">配置中心</span>
-                <h2>把 GitHub 和大模型配置放到页面里完成</h2>
-                <p>这里保存的是本地运行时配置，密钥不会提交到仓库。生产环境应替换为企业密钥管理或云厂商 Secret Manager。</p>
-              </div>
+            <div className="runtime-config-hero-inline">
+              <span>系统配置</span>
               <button className="primary-button" type="button" onClick={saveRuntimeConfig} disabled={isSavingRuntimeConfig}>
                 {isSavingRuntimeConfig ? '保存中...' : '保存配置'}
               </button>
-            </article>
+            </div>
 
             <div className="config-status-strip">
               <b>后端配置服务</b>
@@ -969,16 +954,33 @@ function App() {
               <button type="button" onClick={loadRuntimeConfig}>刷新状态</button>
             </div>
 
-            <section className="runtime-config-grid">
-              {runtimeConfigGroups.map((group) => (
-                <article className="runtime-config-card" key={group.title}>
+            <section className="runtime-config-layout">
+              <nav className="runtime-config-nav" aria-label="配置分类">
+                {runtimeConfigGroups.map((group) => {
+                  const configuredCount = group.fields.filter(([key]) => runtimeConfigFieldsState.find((field) => field.key === key)?.configured).length
+
+                  return (
+                    <button
+                      className={selectedRuntimeConfigGroup.title === group.title ? 'active' : ''}
+                      key={group.title}
+                      type="button"
+                      onClick={() => setActiveRuntimeGroup(group.title)}
+                    >
+                      <span>{group.title}</span>
+                      <b>{configuredCount}/{group.fields.length}</b>
+                    </button>
+                  )
+                })}
+              </nav>
+
+              <article className="runtime-config-card active">
                   <div className="section-heading">
-                    <span>{group.title}</span>
-                    <strong>{group.fields.length} 项</strong>
+                    <span>{selectedRuntimeConfigGroup.title}</span>
+                    <strong>{selectedRuntimeConfigGroup.fields.length} 项</strong>
                   </div>
-                  <p>{group.description}</p>
+                  <p>{selectedRuntimeConfigGroup.description}</p>
                   <div className="runtime-field-list">
-                    {group.fields.map(([key, label, secret]) => {
+                    {selectedRuntimeConfigGroup.fields.map(([key, label, secret]) => {
                       const meta = runtimeConfigFieldsState.find((field) => field.key === key)
 
                       return (
@@ -997,8 +999,7 @@ function App() {
                       )
                     })}
                   </div>
-                </article>
-              ))}
+              </article>
             </section>
           </section>
         )}
@@ -1007,16 +1008,15 @@ function App() {
           <section className="onboarding-view">
             <article className="flow-panel">
               <div className="section-heading">
-                <span>核心业务流</span>
-                <strong>接入期 / 审查期 / 反馈期</strong>
+                <span>接入状态</span>
+                <strong>当前工作区</strong>
               </div>
               <div className="flow-grid">
                 {businessFlow.map((item) => (
                   <div className="flow-card" key={item.stage}>
+                    <span>{item.status}</span>
                     <b>{item.stage}</b>
-                    <p><strong>触发：</strong>{item.trigger}</p>
-                    <p><strong>后台：</strong>{item.action}</p>
-                    <p><strong>呈现：</strong>{item.output}</p>
+                    <p>{item.detail}</p>
                   </div>
                 ))}
               </div>
@@ -1041,7 +1041,6 @@ function App() {
                   ))}
                 </div>
                 <h2>{selectedMode.title}</h2>
-                <p>{selectedMode.description}</p>
                 <div className="setup-form" aria-label="架构表单预览">
                   <label>
                     项目类型
@@ -1081,12 +1080,7 @@ function App() {
                   <span>生成结果</span>
                   <strong>AI 审查规范</strong>
                 </div>
-                <p>已为当前项目生成 AI 审查规范，请确认或微调后启用。</p>
                 <pre>{configPreview.join('\n')}</pre>
-                <div className="config-impact">
-                  <span>策略影响</span>
-                  <p>拦截层会优先扫描 {blockerRules || '未配置规则'}；架构层会围绕 {listToYamlArray(reviewConfig.criticalPaths) || '未配置目录'} 建立隐式规范。</p>
-                </div>
                 <button className="primary-button" type="button" onClick={() => setActiveView('评审工作台')}>
                   确认并进入审查
                 </button>
@@ -1121,11 +1115,10 @@ function App() {
             </section>
 
             <section className="lane-grid" aria-label="多路并发分析">
-              {analysisLanes.map(([name, type, detail]) => (
+              {analysisLanes.map(([name, type]) => (
                 <div className="lane-card" key={name}>
                   <span>{name}</span>
                   <b>{type}</b>
-                  <p>{detail}</p>
                 </div>
               ))}
             </section>
@@ -1136,13 +1129,12 @@ function App() {
                 <strong>{isAnalyzing ? 'Running...' : review.ciStatus}</strong>
               </div>
               <div className="progress-steps">
-                {analysisProgress.map(([title, detail], index) => {
+                {analysisProgress.map(([title], index) => {
                   const state = index < progressStep ? 'done' : index === progressStep ? 'active' : 'pending'
 
                   return (
                     <div className={`progress-step ${state}`} key={title}>
                       <b>{title}</b>
-                      <p>{detail}</p>
                     </div>
                   )
                 })}
@@ -1359,10 +1351,9 @@ function App() {
                   <span>系统架构拆解</span>
                   <strong>V1.0 商业化基线</strong>
                 </div>
-                {architectureModules.map(([title, detail]) => (
+                {architectureModules.map(([title]) => (
                   <div className="decision-row" key={title}>
                     <b>{title}</b>
-                    <p>{detail}</p>
                   </div>
                 ))}
               </article>
@@ -1370,16 +1361,15 @@ function App() {
 
             <article className="platform-panel">
               <div className="section-heading">
-                <span>平台集成</span>
-                <strong>GitHub / GitLab 生态</strong>
+                <span>集成状态</span>
+                <strong>发布链路</strong>
               </div>
               <div className="platform-grid">
                 {platformIntegrations.map((item) => (
                   <div className="platform-card" key={item.name}>
                     <span>{item.status}</span>
                     <b>{item.name}</b>
-                    <em>{item.trigger}</em>
-                    <p>{item.detail}</p>
+                    <em>{item.detail}</em>
                   </div>
                 ))}
               </div>
@@ -1396,7 +1386,6 @@ function App() {
                     <b>{route.task}</b>
                     <span>{route.model}</span>
                     <em>{route.latency} · {route.cost}成本</em>
-                    <p>{route.reason}</p>
                   </div>
                 ))}
               </div>
@@ -1409,35 +1398,35 @@ function App() {
             <section className="secondary-view compact">
               <article className="decision-panel">
                 <div className="section-heading">
-                  <span>评审对象</span>
-                  <strong>AI 时代的责任边界</strong>
+                  <span>质量归因</span>
+                  <strong>处理优先级</strong>
                 </div>
                 <div className="target-list">
                   <div>
                     <b>代码产物</b>
-                    <p>这次 Diff 是否破坏正确性、安全性、可维护性和可测试性。</p>
+                    <span>正确性 / 安全 / 测试</span>
                   </div>
                   <div>
-                    <b>AI Agent 轨迹</b>
-                    <p>生成过程是否出现浅层修复、循环改写、缺少证据或没有测试假设。</p>
+                    <b>生成过程</b>
+                    <span>证据 / 取舍 / 循环</span>
                   </div>
                   <div>
-                    <b>人类负责人</b>
-                    <p>谁来确认业务意图、风险取舍和上线责任。</p>
+                    <b>责任确认</b>
+                    <span>业务意图 / 风险接受</span>
                   </div>
                 </div>
               </article>
 
               <article className="roadmap-panel">
                 <div className="section-heading">
-                  <span>未来扩展</span>
-                  <strong>从 PR 后移到研发全流程</strong>
+                  <span>能力路线</span>
+                  <strong>下一阶段</strong>
                 </div>
                 <ul>
-                  <li>IDE 预审：在 VS Code 或 JetBrains 中提前发现问题。</li>
-                  <li>自动修复分支：系统创建修复分支并运行单元测试。</li>
-                  <li>团队反馈校准：根据采纳、拒绝和忽略行为优化建议质量。</li>
-                  <li>研发质量看板：沉淀常见风险类型、Review 耗时和质量趋势。</li>
+                  <li>IDE 预审</li>
+                  <li>自动修复分支</li>
+                  <li>团队反馈校准</li>
+                  <li>研发质量看板</li>
                 </ul>
               </article>
             </section>
@@ -1541,7 +1530,6 @@ function App() {
               </div>
               <div className="learning-path">
                 <span>沉淀路径</span>
-                <p>漏报会进入人工确认队列：高频漏报沉淀为硬规则，架构类漏报写入 RAG 样本，意图类漏报更新 Issue-Diff 对齐 Prompt。</p>
               </div>
             </article>
           </section>
