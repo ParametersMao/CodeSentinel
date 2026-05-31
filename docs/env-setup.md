@@ -49,6 +49,7 @@ GITHUB_PRIVATE_KEY_PATH=
 GITHUB_WEBHOOK_SECRET=
 GITHUB_INSTALLATION_ID=
 WEBHOOK_AUTO_PUBLISH=false
+WEBHOOK_ASYNC_PROCESSING=true
 ```
 
 说明：
@@ -59,6 +60,7 @@ WEBHOOK_AUTO_PUBLISH=false
 - `GITHUB_WEBHOOK_SECRET`：你在 GitHub App Webhook 设置里填写的 Secret。
 - `GITHUB_INSTALLATION_ID`：GitHub App 安装到目标仓库后的 Installation ID。
 - `WEBHOOK_AUTO_PUBLISH`：填 `true` 后，收到真实 PR Webhook 会自动创建 GitHub Check Run，并在分析完成后发布《变更验收报告》评论；未准备好生产使用时建议保持 `false`。
+- `WEBHOOK_ASYNC_PROCESSING`：默认 `true`，Webhook 会快速返回任务号，后台继续分析和发布；本地调试想直接看完整响应时可改为 `false`。
 
 建议权限：
 

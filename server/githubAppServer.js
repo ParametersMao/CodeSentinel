@@ -11,6 +11,7 @@ import { buildContextFilesForAnalysis, fetchGitHubPullRequestContext } from './g
 import { publishGitHubReview, publishGitHubReviewWithStatusFlow } from './github/publisher.js'
 import { createExamplePullRequestPayload, createPullRequestJob } from './github/reviewPipeline.js'
 import { createGitHubSignature, verifyGitHubSignature } from './github/verifySignature.js'
+import { createReviewJobQueue } from './jobs/reviewJobQueue.js'
 import { buildModelRoutePlan } from './models/modelRouter.js'
 import { retrieveReviewContext } from './rag/contextRetriever.js'
 import { buildFallbackAiReview, generateAiReview } from './review/aiReviewService.js'
@@ -22,6 +23,7 @@ const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET ?? ''
 const configPath = process.env.AI_REVIEWER_CONFIG_PATH ?? path.resolve(process.cwd(), '.ai-reviewer.yml')
 const feedbackStorePath = process.env.FEEDBACK_STORE_PATH ?? path.resolve(process.cwd(), 'data/feedback.jsonl')
 const defaultReviewRunStorePath = path.resolve(process.cwd(), 'data/review-runs.jsonl')
+const reviewJobQueue = createReviewJobQueue()
 
 function isRuntimeFlagEnabled(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
@@ -90,6 +92,31 @@ async function handleGitHubWebhook(request, response) {
   const job = createPullRequestJob(payload, eventName, { reviewConfig: loadedConfig.config })
   const runtimeEnv = getRuntimeEnvSync()
   const autoPublish = isRuntimeFlagEnabled(runtimeEnv.WEBHOOK_AUTO_PUBLISH)
+  const asyncProcessing = isRuntimeFlagEnabled(runtimeEnv.WEBHOOK_ASYNC_PROCESSING ?? 'true')
+
+  if (asyncProcessing && job.status === 'queued') {
+    const queuedJob = reviewJobQueue.enqueue({
+      type: 'github-webhook-review',
+      payload: {
+        eventName,
+        autoPublish,
+        repository: job.repository.fullName,
+        pullRequest: job.pullRequest.number,
+        headSha: job.pullRequest.headSha,
+      },
+      worker: async () => processWebhookReview({ payload, loadedConfig, job, autoPublish }),
+    })
+
+    jsonResponse(response, 202, {
+      ok: true,
+      signature: signatureResult,
+      asyncProcessing: true,
+      autoPublish,
+      job,
+      queueJob: publicQueueJob(queuedJob),
+    })
+    return
+  }
 
   if (autoPublish && job.status === 'queued') {
     try {
@@ -155,6 +182,37 @@ async function handleGitHubWebhook(request, response) {
     reviewRun,
     ...reviewResult,
   })
+}
+
+async function processWebhookReview({ payload, loadedConfig, job, autoPublish }) {
+  if (autoPublish) {
+    const reviewResult = await publishGitHubReviewWithStatusFlow({
+      job,
+      runAnalysis: () => runPullRequestAnalysis({ payload, loadedConfig, job }),
+    })
+    const reviewRun = await saveReviewRun(
+      {
+        source: 'github-webhook-auto-publish',
+        job,
+        ...reviewResult,
+      },
+      getReviewRunStorePath(),
+    )
+
+    return { autoPublish: true, reviewRun, ...reviewResult }
+  }
+
+  const reviewResult = await runPullRequestAnalysis({ payload, loadedConfig, job })
+  const reviewRun = await saveReviewRun(
+    {
+      source: 'github-webhook-analysis',
+      job,
+      ...reviewResult,
+    },
+    getReviewRunStorePath(),
+  )
+
+  return { autoPublish: false, reviewRun, ...reviewResult }
 }
 
 async function handleRuleAnalysis(request, response) {
@@ -455,6 +513,55 @@ async function handleReviewRunSummary(response) {
   })
 }
 
+function publicQueueJob(job) {
+  if (!job) {
+    return null
+  }
+
+  return {
+    id: job.id,
+    type: job.type,
+    state: job.state,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    attempts: job.attempts,
+    payload: job.payload,
+    result: job.result
+      ? {
+          autoPublish: job.result.autoPublish,
+          reviewRunId: job.result.reviewRun?.id,
+          publishStatus: job.result.publishResult?.status,
+          checkRunConclusion: job.result.publishResult?.checkRun?.conclusion,
+        }
+      : null,
+    error: job.error,
+  }
+}
+
+async function handleReviewJobs(response) {
+  jsonResponse(response, 200, {
+    ok: true,
+    summary: reviewJobQueue.summary(),
+    jobs: reviewJobQueue.list().map(publicQueueJob),
+  })
+}
+
+async function handleReviewJob(response, id) {
+  const job = reviewJobQueue.get(id)
+
+  if (!job) {
+    jsonResponse(response, 404, { ok: false, error: 'Review job not found' })
+    return
+  }
+
+  jsonResponse(response, 200, {
+    ok: true,
+    job: publicQueueJob(job),
+  })
+}
+
 async function handleExample(response) {
   const payload = createExamplePullRequestPayload()
   const body = Buffer.from(JSON.stringify(payload))
@@ -565,10 +672,20 @@ export function createGitHubAppServer() {
         return
       }
 
+      if (request.method === 'GET' && url.pathname === '/review-jobs') {
+        await handleReviewJobs(response)
+        return
+      }
+
+      if (request.method === 'GET' && url.pathname.startsWith('/review-jobs/')) {
+        await handleReviewJob(response, decodeURIComponent(url.pathname.replace('/review-jobs/', '')))
+        return
+      }
+
       jsonResponse(response, 404, {
         ok: false,
         error: 'Route not found',
-        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /publish/github', 'POST /feedback', 'GET /feedback/summary', 'GET /review-runs', 'GET /review-runs/summary'],
+        routes: ['GET /health', 'GET /runtime-config', 'POST /runtime-config', 'GET /webhooks/github/example', 'POST /webhooks/github', 'POST /analysis/rules', 'POST /analysis/ai-review', 'POST /publish/github', 'POST /feedback', 'GET /feedback/summary', 'GET /review-runs', 'GET /review-runs/summary', 'GET /review-jobs', 'GET /review-jobs/:id'],
       })
     } catch (error) {
       jsonResponse(response, 500, {

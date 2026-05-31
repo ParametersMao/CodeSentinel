@@ -17,6 +17,7 @@ npm run server:publish-check
 npm run server:rag-check
 npm run server:feedback-check
 npm run server:review-run-check
+npm run server:queue-check
 npm run server:runtime-config-check
 npm run server:context-check
 npm run server:dev
@@ -42,6 +43,8 @@ http://127.0.0.1:8787
 - `GET /feedback/summary`: summarize persisted feedback events.
 - `GET /review-runs`: read the latest persisted review run records.
 - `GET /review-runs/summary`: summarize persisted review run records for dashboards.
+- `GET /review-jobs`: inspect in-memory async webhook review jobs.
+- `GET /review-jobs/:id`: inspect one async webhook review job.
 
 ## Environment Variables
 
@@ -56,6 +59,7 @@ GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GITHUB_INSTALLATION_ID=
 WEBHOOK_AUTO_PUBLISH=false
+WEBHOOK_ASYNC_PROCESSING=true
 AI_REVIEWER_CONFIG_PATH=.ai-reviewer.yml
 FEEDBACK_STORE_PATH=data/feedback.jsonl
 REVIEW_RUN_STORE_PATH=data/review-runs.jsonl
@@ -96,6 +100,7 @@ Implemented:
 - Local RAG-style context retriever for implicit standards and changed-file patches.
 - JSONL feedback persistence for helpful, unhelpful, accepted, ignored, and missed-risk events.
 - JSONL review run persistence for audit trails, review quality dashboards, and future trend analysis.
+- In-memory async webhook queue so GitHub receives a fast 202 response while analysis continues in the background.
 - GitHub API context client for changed files, full files, dependency files, linked Issues, and historical code snippets.
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
@@ -126,4 +131,5 @@ It requires a token with Checks and Pull Requests / Issues write permissions. Th
 Next:
 
 - Replace the local RAG scorer with a durable vector database.
+- Replace the in-memory async queue with a durable worker queue for multi-instance deployments.
 - Move review run storage from local JSONL to a durable database.

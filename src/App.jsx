@@ -20,6 +20,7 @@ const runtimeConfigGroups = [
       ['GITHUB_PRIVATE_KEY_PATH', 'Private Key 文件路径', false],
       ['GITHUB_INSTALLATION_ID', 'Installation ID', false],
       ['WEBHOOK_AUTO_PUBLISH', 'Webhook 自动发布', false],
+      ['WEBHOOK_ASYNC_PROCESSING', 'Webhook 异步处理', false],
     ],
   },
   {
