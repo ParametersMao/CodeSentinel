@@ -656,9 +656,14 @@ function App() {
   const [runtimeConfigFieldsState, setRuntimeConfigFieldsState] = useState([])
   const [runtimeConfigStatus, setRuntimeConfigStatus] = useState('尚未连接后端配置服务。')
   const [isSavingRuntimeConfig, setIsSavingRuntimeConfig] = useState(false)
+  const [opsStatus, setOpsStatus] = useState('尚未读取运行状态。')
+  const [reviewJobSummary, setReviewJobSummary] = useState({ total: 0, active: 0, byState: {} })
+  const [reviewRunSummary, setReviewRunSummary] = useState({ total: 0, byStatus: {}, byPublishStatus: {}, risksBySeverity: {} })
+  const [reviewJobs, setReviewJobs] = useState([])
 
   useEffect(() => {
     loadRuntimeConfig()
+    loadOperationalStatus()
   }, [])
 
   const visibleFindings = useMemo(() => {
@@ -763,6 +768,28 @@ function App() {
       setRuntimeConfigStatus(`${error.message}，请确认后端服务正在运行。`)
     } finally {
       setIsSavingRuntimeConfig(false)
+    }
+  }
+
+  async function loadOperationalStatus() {
+    try {
+      const [jobsResponse, runsResponse] = await Promise.all([
+        fetch(`${apiBaseUrl}/review-jobs`),
+        fetch(`${apiBaseUrl}/review-runs/summary`),
+      ])
+
+      if (!jobsResponse.ok || !runsResponse.ok) {
+        throw new Error('运行状态服务暂不可用')
+      }
+
+      const [jobsData, runsData] = await Promise.all([jobsResponse.json(), runsResponse.json()])
+
+      setReviewJobSummary(jobsData.summary ?? { total: 0, active: 0, byState: {} })
+      setReviewJobs(jobsData.jobs ?? [])
+      setReviewRunSummary(runsData.summary ?? { total: 0, byStatus: {}, byPublishStatus: {}, risksBySeverity: {} })
+      setOpsStatus(`已读取 ${jobsData.summary?.total ?? 0} 个队列任务和 ${runsData.summary?.total ?? 0} 条审查记录。`)
+    } catch (error) {
+      setOpsStatus(`${error.message} 请确认后端服务正在运行。`)
     }
   }
 
@@ -1389,6 +1416,33 @@ function App() {
                   <div className="calibration-card" key={title}>
                     <b>{title}</b>
                     <p>{detail}</p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="ops-panel">
+              <div className="section-heading">
+                <span>运行状态</span>
+                <strong>队列 / 审查记录</strong>
+              </div>
+              <div className="ops-toolbar">
+                <span>{opsStatus}</span>
+                <button type="button" onClick={loadOperationalStatus}>刷新</button>
+              </div>
+              <div className="ops-metrics">
+                <span><strong>{reviewJobSummary.active ?? 0}</strong> 进行中任务</span>
+                <span><strong>{reviewJobSummary.total ?? 0}</strong> 队列任务</span>
+                <span><strong>{reviewRunSummary.total ?? 0}</strong> 审查记录</span>
+                <span><strong>{reviewRunSummary.risksBySeverity?.P0 ?? 0}</strong> P0 累计</span>
+              </div>
+              <div className="ops-job-list">
+                {reviewJobs.length === 0 && <div className="empty-state">当前暂无后台审查任务。</div>}
+                {reviewJobs.slice(0, 5).map((job) => (
+                  <div className="ops-job-row" key={job.id}>
+                    <b>{job.payload?.repository ?? 'unknown'} #{job.payload?.pullRequest ?? '-'}</b>
+                    <span>{job.state}</span>
+                    <em>{job.payload?.autoPublish ? '自动发布' : '仅分析'} · {job.attempts} 次</em>
                   </div>
                 ))}
               </div>

@@ -154,6 +154,7 @@
 .pr-comment-panel,
 .platform-panel,
 .calibration-panel,
+.ops-panel,
 .missed-panel,
 .model-routing-panel,
 .architecture-strip {
@@ -1275,6 +1276,36 @@ h2 {
   padding: 16px;
 }
 
+.ops-panel {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.ops-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.ops-toolbar span {
+  color: #526071;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ops-toolbar button {
+  min-height: 34px;
+  border: 1px solid #c9d5e7;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-weight: 850;
+  padding: 0 12px;
+}
+
 .feedback-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1298,6 +1329,72 @@ h2 {
 .feedback-metrics strong {
   color: #111827;
   font-size: 24px;
+}
+
+.ops-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ops-metrics span {
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  padding: 0 12px;
+}
+
+.ops-metrics strong {
+  color: #111827;
+  font-size: 22px;
+}
+
+.ops-job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-job-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto minmax(120px, auto);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.ops-job-row b {
+  min-width: 0;
+  overflow: hidden;
+  color: #172033;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-job-row span {
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #526274;
+  font-size: 11px;
+  font-weight: 850;
+  padding: 3px 8px;
+}
+
+.ops-job-row em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  text-align: right;
 }
 
 .calibration-grid {
@@ -1546,6 +1643,8 @@ h2 {
   .acceptance-report,
   .platform-grid,
   .feedback-metrics,
+  .ops-metrics,
+  .ops-job-row,
   .calibration-grid,
   .missed-layout,
   .runtime-config-hero,
@@ -1615,6 +1714,7 @@ h2 {
   .pr-comment-panel,
   .platform-panel,
   .calibration-panel,
+  .ops-panel,
   .missed-panel,
   .model-routing-panel {
     padding: 12px;
