@@ -669,6 +669,7 @@ function App() {
   const [runtimeConfigStatus, setRuntimeConfigStatus] = useState('尚未连接后端配置服务。')
   const [isSavingRuntimeConfig, setIsSavingRuntimeConfig] = useState(false)
   const [opsStatus, setOpsStatus] = useState('尚未读取运行状态。')
+  const [feedbackStatus, setFeedbackStatus] = useState('反馈会写入后端，用于后续降噪校准。')
   const [reviewJobSummary, setReviewJobSummary] = useState({ total: 0, active: 0, byState: {} })
   const [reviewRunSummary, setReviewRunSummary] = useState({ total: 0, byStatus: {}, byPublishStatus: {}, risksBySeverity: {} })
   const [reviewJobs, setReviewJobs] = useState([])
@@ -717,8 +718,36 @@ function App() {
     setReviewConfig((current) => ({ ...current, [field]: value }))
   }
 
-  function recordFeedback(findingId, value) {
+  async function recordFeedback(findingId, value) {
     setFeedbackByFinding((current) => ({ ...current, [findingId]: value }))
+    const finding = review.findings.find((item) => item.id === findingId)
+
+    if (!finding) return
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: value === 'useful' ? 'helpful' : 'unhelpful',
+          repository: review.pr.repo,
+          pullRequest: review.pr.number,
+          findingId,
+          severity: finding.severity,
+          rule: finding.id,
+          actor: 'web-reviewer',
+          comment: value === 'useful' ? '前端标记为有帮助' : '前端标记为太打扰',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('反馈保存失败')
+      }
+
+      setFeedbackStatus('反馈已保存，后续会用于调整同类建议的曝光阈值。')
+    } catch (error) {
+      setFeedbackStatus(`${error.message}，当前仅保留在页面状态中。`)
+    }
   }
 
   async function loadRuntimeConfig() {
@@ -1423,6 +1452,7 @@ function App() {
                 <span><strong>{feedbackCounts.noisy}</strong> 噪声样本</span>
                 <span><strong>{feedbackCounts.pending}</strong> 待确认</span>
               </div>
+              <p className="feedback-status">{feedbackStatus}</p>
               <div className="calibration-grid">
                 {calibrationActions.map(([title, detail]) => (
                   <div className="calibration-card" key={title}>
