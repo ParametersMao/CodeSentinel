@@ -113,7 +113,7 @@ Implemented:
 - Optional Jira context connector for PR-linked issue keys such as `ABC-123`.
 - Model runtime configuration for OpenAI, Anthropic, DeepSeek, Qwen, and local fallback providers.
 - Runtime configuration API for Web UI setup without editing `.env`.
-- AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen.
+- AI review generation through OpenAI-compatible chat completions for OpenAI, DeepSeek, and Qwen, plus Anthropic Messages API.
 - GitHub publishing for Check Runs and PR homepage comments, including a Webhook-triggered running-to-completed Check Run flow.
 - GitHub App JWT and Installation Token exchange for private repository access.
 
